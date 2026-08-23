@@ -9,9 +9,12 @@ from kubernetes_resource_optimizer.optimization.bounds import (
     DerivedBounds,
     derive_bounds,
 )
+from kubernetes_resource_optimizer.optimization.config import OptimizationConfig
 from kubernetes_resource_optimizer.optimization.constraints import (
     add_assignment_constraints,
+    add_limit_chance_constraints,
     add_node_activation_constraints,
+    add_request_chance_constraints,
     add_request_limit_ordering_constraints,
 )
 from kubernetes_resource_optimizer.optimization.objective import (
@@ -32,13 +35,14 @@ class OptimizationModel:
 
 
 def build_model(
-    data: InputData, bounds: DerivedBounds | None = None
+    data: InputData,
+    config: OptimizationConfig,
+    bounds: DerivedBounds | None = None,
 ) -> OptimizationModel:
-    """Build the requested x/y/r/l-only MILP stage.
+    """Build the MILP through request and limit chance constraints.
 
     Variable bounds implement 0 <= r <= R_max and 0 <= l <= L_max.
-    Later chance, effective-demand, capacity, and overcommit stages are
-    intentionally absent.
+    Effective-demand, capacity, and overcommit stages are intentionally absent.
     """
 
     resolved_bounds = bounds if bounds is not None else derive_bounds(data)
@@ -47,6 +51,8 @@ def build_model(
 
     add_assignment_constraints(problem, data, variables)
     add_node_activation_constraints(problem, data, variables)
+    add_request_chance_constraints(problem, data, config, resolved_bounds, variables)
+    add_limit_chance_constraints(problem, data, config, resolved_bounds, variables)
     add_request_limit_ordering_constraints(problem, data, variables)
     set_minimum_active_nodes_objective(problem, variables)
 

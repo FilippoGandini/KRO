@@ -12,10 +12,12 @@ from kubernetes_resource_optimizer.data.models import (
     Resource,
     UsageSample,
 )
+from kubernetes_resource_optimizer.optimization.config import OptimizationConfig
 from kubernetes_resource_optimizer.optimization.model import build_model
 from kubernetes_resource_optimizer.optimization.solver import CbcSolver, SolverStatus
 
 TIMESTAMP = datetime(2026, 8, 1, tzinfo=UTC)
+ZERO_RISK = OptimizationConfig(0, 0, 0, 0, 1.5, 1.5)
 
 
 def make_data(*, pod_count: int, node_count: int) -> InputData:
@@ -39,7 +41,7 @@ def make_data(*, pod_count: int, node_count: int) -> InputData:
 
 
 def test_one_workload_one_node_uses_the_only_node() -> None:
-    built = build_model(make_data(pod_count=1, node_count=1))
+    built = build_model(make_data(pod_count=1, node_count=1), ZERO_RISK)
 
     result = CbcSolver().solve(built.problem)
 
@@ -50,7 +52,7 @@ def test_one_workload_one_node_uses_the_only_node() -> None:
 
 
 def test_two_workloads_two_nodes_minimizes_to_one_active_node() -> None:
-    built = build_model(make_data(pod_count=2, node_count=2))
+    built = build_model(make_data(pod_count=2, node_count=2), ZERO_RISK)
 
     result = CbcSolver().solve(built.problem)
 
@@ -60,7 +62,7 @@ def test_two_workloads_two_nodes_minimizes_to_one_active_node() -> None:
 
 
 def test_every_workload_is_assigned_exactly_once() -> None:
-    built = build_model(make_data(pod_count=2, node_count=2))
+    built = build_model(make_data(pod_count=2, node_count=2), ZERO_RISK)
     CbcSolver().solve(built.problem)
 
     for pod_id in ("pod-0", "pod-1"):
@@ -71,7 +73,7 @@ def test_every_workload_is_assigned_exactly_once() -> None:
 
 
 def test_inactive_node_cannot_host_a_workload() -> None:
-    built = build_model(make_data(pod_count=1, node_count=1))
+    built = build_model(make_data(pod_count=1, node_count=1), ZERO_RISK)
     built.problem.addConstraint(
         built.variables.node_active["node-0"] == 0, "force_inactive"
     )
@@ -86,7 +88,7 @@ def test_inactive_node_cannot_host_a_workload() -> None:
 
 @pytest.mark.parametrize("resource", list(Resource))
 def test_request_cannot_exceed_limit(resource: Resource) -> None:
-    built = build_model(make_data(pod_count=1, node_count=1))
+    built = build_model(make_data(pod_count=1, node_count=1), ZERO_RISK)
     built.problem.addConstraint(
         built.variables.request["pod-0", resource] == 2.0, "force_request"
     )
@@ -100,7 +102,7 @@ def test_request_cannot_exceed_limit(resource: Resource) -> None:
 
 
 def test_request_and_limit_variables_use_derived_upper_bounds() -> None:
-    built = build_model(make_data(pod_count=1, node_count=1))
+    built = build_model(make_data(pod_count=1, node_count=1), ZERO_RISK)
 
     assert built.variables.request["pod-0", Resource.CPU].lowBound == 0
     assert built.variables.request["pod-0", Resource.CPU].upBound == 2.0
@@ -110,12 +112,21 @@ def test_request_and_limit_variables_use_derived_upper_bounds() -> None:
     assert built.variables.limit["pod-0", Resource.MEMORY].upBound == 4096.0
 
 
-def test_model_contains_only_first_stage_variable_families() -> None:
-    built = build_model(make_data(pod_count=2, node_count=2))
+def test_model_contains_expected_variable_families_without_q_or_s() -> None:
+    built = build_model(make_data(pod_count=2, node_count=2), ZERO_RISK)
 
-    assert len(built.problem.variables()) == 14
+    assert len(built.problem.variables()) == 22
     assert all(
-        variable.name.startswith(("placement_", "node_active_", "request_", "limit_"))
+        variable.name.startswith(
+            (
+                "placement_",
+                "node_active_",
+                "request_",
+                "limit_",
+                "request_violation_",
+                "limit_violation_",
+            )
+        )
         for variable in built.problem.variables()
     )
     assert built.problem.sense == pulp.LpMinimize
