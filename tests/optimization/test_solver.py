@@ -6,6 +6,7 @@ import pytest
 from kubernetes_resource_optimizer.optimization.solver import (
     CbcSolver,
     SolverStatus,
+    _normalize_status,
 )
 
 
@@ -24,3 +25,12 @@ def test_cbc_solves_tiny_binary_milp() -> None:
     assert second.varValue == pytest.approx(1.0)
     assert result.solve_time_seconds >= 0
     assert model.get_constraint_by_name("minimum_coverage") is not None
+
+
+def test_integer_feasible_incumbent_is_not_reported_as_optimal() -> None:
+    status = _normalize_status(
+        pulp.LpStatusOptimal,
+        pulp.LpSolutionIntegerFeasible,
+    )
+
+    assert status is SolverStatus.FEASIBLE

@@ -14,6 +14,7 @@ class SolverStatus(StrEnum):
     """Solver states exposed independently of PuLP status constants."""
 
     OPTIMAL = "optimal"
+    FEASIBLE = "feasible"
     INFEASIBLE = "infeasible"
     UNBOUNDED = "unbounded"
     NOT_SOLVED = "not_solved"
@@ -65,10 +66,10 @@ class CbcSolver:
         raw_status = model.solve(solver)
         solve_time_seconds = perf_counter() - started_at
 
-        status = _normalize_status(raw_status)
+        status = _normalize_status(raw_status, model.sol_status)
         objective_value = (
             float(pulp.value(model.objective))
-            if status is SolverStatus.OPTIMAL
+            if status in {SolverStatus.OPTIMAL, SolverStatus.FEASIBLE}
             else None
         )
         return SolverResult(
@@ -78,7 +79,10 @@ class CbcSolver:
         )
 
 
-def _normalize_status(raw_status: int) -> SolverStatus:
+def _normalize_status(raw_status: int, solution_status: int) -> SolverStatus:
+    if solution_status == pulp.LpSolutionIntegerFeasible:
+        return SolverStatus.FEASIBLE
+
     statuses = {
         pulp.LpStatusOptimal: SolverStatus.OPTIMAL,
         pulp.LpStatusInfeasible: SolverStatus.INFEASIBLE,
