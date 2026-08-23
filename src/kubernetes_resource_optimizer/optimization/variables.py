@@ -10,6 +10,7 @@ from kubernetes_resource_optimizer.optimization.bounds import BoundKey, DerivedB
 
 PlacementKey = tuple[str, str]
 ViolationKey = tuple[str, datetime, Resource]
+EffectiveDemandKey = tuple[str, str, datetime, Resource]
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,6 +23,7 @@ class ModelVariables:
     limit: dict[BoundKey, pulp.LpVariable]
     request_violation: dict[ViolationKey, pulp.LpVariable]
     limit_violation: dict[ViolationKey, pulp.LpVariable]
+    effective_demand: dict[EffectiveDemandKey, pulp.LpVariable]
 
 
 def create_variables(
@@ -76,6 +78,16 @@ def create_variables(
         for sample in data.usage_samples
         for resource in Resource
     }
+    effective_demand = {
+        (pod.pod_id, node.node_id, timestamp, resource): model.add_variable(
+            f"effective_demand[{pod.pod_id},{node.node_id},{timestamp.isoformat()},{resource.value}]",
+            lowBound=0,
+        )
+        for pod in data.pods
+        for node in data.nodes
+        for timestamp in sorted({sample.timestamp for sample in data.usage_samples})
+        for resource in Resource
+    }
     return ModelVariables(
         placement,
         node_active,
@@ -83,4 +95,5 @@ def create_variables(
         limit,
         request_violation,
         limit_violation,
+        effective_demand,
     )
