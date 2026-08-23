@@ -1,0 +1,3 @@
+node_id,cpu_capacity,memory_capacity
+node-a,4,4096
+node-b,4,4096

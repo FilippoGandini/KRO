@@ -1,0 +1,3 @@
+workload_id,cpu_request_max,memory_request_max,cpu_limit_max,memory_limit_max
+api,4,4096,4,4096
+worker,4,4096,4,4096

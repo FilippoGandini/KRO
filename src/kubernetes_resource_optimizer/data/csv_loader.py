@@ -20,7 +20,11 @@ from kubernetes_resource_optimizer.data.validation import (
 Parser = Callable[[str], float]
 
 
-def _rows(path: Path, required: set[str]) -> list[tuple[int, dict[str, str | None]]]:
+def _rows(
+    path: Path,
+    required: set[str],
+    any_identifier: set[str] | None = None,
+) -> list[tuple[int, dict[str, str | None]]]:
     try:
         with path.open(encoding="utf-8", newline="") as stream:
             reader = csv.DictReader(stream)
@@ -29,6 +33,11 @@ def _rows(path: Path, required: set[str]) -> list[tuple[int, dict[str, str | Non
             if missing:
                 raise InputValidationError(
                     [f"{path.name} is missing required columns: {', '.join(missing)}"]
+                )
+            if any_identifier is not None and headers.isdisjoint(any_identifier):
+                choices = " or ".join(sorted(any_identifier))
+                raise InputValidationError(
+                    [f"{path.name} is missing required column: {choices}"]
                 )
             return [(line, row) for line, row in enumerate(reader, start=2)]
     except OSError as error:
@@ -40,6 +49,13 @@ def _required(row: dict[str, str | None], field: str, source: str) -> str:
     if value is None or not value.strip():
         raise InputValidationError([f"{source}: missing value for {field}"])
     return value.strip()
+
+
+def _workload_id(row: dict[str, str | None], source: str) -> str:
+    """Read the public workload identifier, accepting the legacy pod_id alias."""
+
+    field = "workload_id" if "workload_id" in row else "pod_id"
+    return _required(row, field, source)
 
 
 def _quantity(
@@ -106,7 +122,7 @@ def load_pods_csv(path: Path) -> tuple[Pod, ...]:
         "memory_request_max",
         "memory_limit_max",
     )
-    for line, row in _rows(path, {"pod_id"}):
+    for line, row in _rows(path, set(), {"workload_id", "pod_id"}):
         source = f"{path.name} line {line}"
         values = {
             field: _optional_quantity(
@@ -128,7 +144,7 @@ def load_pods_csv(path: Path) -> tuple[Pod, ...]:
                 for field in memory_fields
             }
         )
-        pods.append(Pod(pod_id=_required(row, "pod_id", source), **values))
+        pods.append(Pod(pod_id=_workload_id(row, source), **values))
     return tuple(pods)
 
 
@@ -146,13 +162,13 @@ def load_usage_csv(path: Path) -> tuple[UsageSample, ...]:
     """Load historical pod observations in canonical units."""
 
     samples: list[UsageSample] = []
-    required = {"timestamp", "pod_id", "cpu_usage", "memory_usage"}
-    for line, row in _rows(path, required):
+    required = {"timestamp", "cpu_usage", "memory_usage"}
+    for line, row in _rows(path, required, {"workload_id", "pod_id"}):
         source = f"{path.name} line {line}"
         samples.append(
             UsageSample(
                 timestamp=_timestamp(_required(row, "timestamp", source), source),
-                pod_id=_required(row, "pod_id", source),
+                pod_id=_workload_id(row, source),
                 cpu_usage=_quantity(
                     row,
                     "cpu_usage",

@@ -1,0 +1,5 @@
+timestamp,workload_id,cpu_usage,memory_usage
+2026-08-01T10:00:00Z,api,0.5,512
+2026-08-01T10:00:00Z,worker,1.0,1024
+2026-08-01T11:00:00Z,api,1.0,768
+2026-08-01T11:00:00Z,worker,1.5,1280
