@@ -10,6 +10,10 @@ from kubernetes_resource_optimizer.optimization.bounds import (
     derive_request_upper_bound,
 )
 from kubernetes_resource_optimizer.optimization.config import OptimizationConfig
+from kubernetes_resource_optimizer.optimization.model import (
+    OptimizationModel,
+    build_model,
+)
 from kubernetes_resource_optimizer.optimization.solver import (
     CbcSolver,
     SolverResult,
@@ -20,9 +24,11 @@ __all__ = [
     "CbcSolver",
     "DerivedBounds",
     "OptimizationConfig",
+    "OptimizationModel",
     "Resource",
     "SolverResult",
     "SolverStatus",
+    "build_model",
     "derive_bounds",
     "derive_limit_big_m",
     "derive_limit_upper_bound",
