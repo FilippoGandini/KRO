@@ -112,10 +112,10 @@ def test_request_and_limit_variables_use_derived_upper_bounds() -> None:
     assert built.variables.limit["pod-0", Resource.MEMORY].upBound == 4096.0
 
 
-def test_model_contains_expected_variable_families_including_q_but_not_s() -> None:
+def test_model_contains_all_expected_variable_families() -> None:
     built = build_model(make_data(pod_count=2, node_count=2), ZERO_RISK)
 
-    assert len(built.problem.variables()) == 30
+    assert len(built.problem.variables()) == 38
     assert all(
         variable.name.startswith(
             (
@@ -126,6 +126,7 @@ def test_model_contains_expected_variable_families_including_q_but_not_s() -> No
                 "request_violation_",
                 "limit_violation_",
                 "effective_demand_",
+                "placed_limit_",
             )
         )
         for variable in built.problem.variables()

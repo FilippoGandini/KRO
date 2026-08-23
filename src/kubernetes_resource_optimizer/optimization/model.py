@@ -14,6 +14,8 @@ from kubernetes_resource_optimizer.optimization.constraints import (
     add_assignment_constraints,
     add_effective_demand_constraints,
     add_limit_chance_constraints,
+    add_limit_linearization_constraints,
+    add_limit_overcommit_constraints,
     add_node_activation_constraints,
     add_request_chance_constraints,
     add_request_limit_ordering_constraints,
@@ -41,10 +43,9 @@ def build_model(
     config: OptimizationConfig,
     bounds: DerivedBounds | None = None,
 ) -> OptimizationModel:
-    """Build the MILP through effective-demand runtime capacity constraints.
+    """Build the complete first-version MILP formulation.
 
     Variable bounds implement 0 <= r <= R_max and 0 <= l <= L_max.
-    Limit-placement linearization and overcommit stages are intentionally absent.
     """
 
     resolved_bounds = bounds if bounds is not None else derive_bounds(data)
@@ -58,6 +59,8 @@ def build_model(
     add_request_limit_ordering_constraints(problem, data, variables)
     add_effective_demand_constraints(problem, data, resolved_bounds, variables)
     add_runtime_capacity_constraints(problem, data, variables)
+    add_limit_linearization_constraints(problem, data, resolved_bounds, variables)
+    add_limit_overcommit_constraints(problem, data, config, variables)
     set_minimum_active_nodes_objective(problem, variables)
 
     return OptimizationModel(problem=problem, variables=variables)

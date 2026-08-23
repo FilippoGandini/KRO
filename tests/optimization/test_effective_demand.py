@@ -147,9 +147,9 @@ def test_simultaneous_effective_demands_force_two_nodes() -> None:
 @pytest.mark.parametrize(
     ("pod_count", "node_count", "scenario_count", "expected_variables", "expected_constraints"),
     [
-        (1, 1, 1, 12, 18),
-        (1, 2, 2, 24, 41),
-        (2, 2, 1, 30, 46),
+        (1, 1, 1, 14, 26),
+        (1, 2, 2, 28, 57),
+        (2, 2, 1, 38, 74),
     ],
 )
 def test_model_size_is_reported_for_focused_instances(

@@ -11,6 +11,7 @@ from kubernetes_resource_optimizer.optimization.bounds import BoundKey, DerivedB
 PlacementKey = tuple[str, str]
 ViolationKey = tuple[str, datetime, Resource]
 EffectiveDemandKey = tuple[str, str, datetime, Resource]
+PlacedLimitKey = tuple[str, str, Resource]
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +25,7 @@ class ModelVariables:
     request_violation: dict[ViolationKey, pulp.LpVariable]
     limit_violation: dict[ViolationKey, pulp.LpVariable]
     effective_demand: dict[EffectiveDemandKey, pulp.LpVariable]
+    placed_limit: dict[PlacedLimitKey, pulp.LpVariable]
 
 
 def create_variables(
@@ -88,6 +90,15 @@ def create_variables(
         for timestamp in sorted({sample.timestamp for sample in data.usage_samples})
         for resource in Resource
     }
+    placed_limit = {
+        (pod.pod_id, node.node_id, resource): model.add_variable(
+            f"placed_limit[{pod.pod_id},{node.node_id},{resource.value}]",
+            lowBound=0,
+        )
+        for pod in data.pods
+        for node in data.nodes
+        for resource in Resource
+    }
     return ModelVariables(
         placement,
         node_active,
@@ -96,4 +107,5 @@ def create_variables(
         request_violation,
         limit_violation,
         effective_demand,
+        placed_limit,
     )
