@@ -2,6 +2,14 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
+
+
+class Resource(StrEnum):
+    """A resource represented in canonical model units."""
+
+    CPU = "cpu"
+    MEMORY = "memory"
 
 
 @dataclass(frozen=True, slots=True)
