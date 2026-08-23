@@ -1,10 +1,11 @@
 [project]
 name = "kubernetes-resource-optimizer"
 version = "0.1.0"
-description = "Add your description here"
+description = "Offline MILP optimizer for Kubernetes workload rightsizing and placement"
 readme = "README.md"
+license = "Apache-2.0"
 authors = [
-    { name = "Filippo_Gandini", email = "filippo3.gandini@mail.polimi.it" }
+    { name = "Filippo Gandini" }
 ]
 requires-python = ">=3.12"
 dependencies = [
@@ -16,6 +17,7 @@ dependencies = [
 
 [project.scripts]
 kubernetes-resource-optimizer = "kubernetes_resource_optimizer:main"
+kro = "kubernetes_resource_optimizer:main"
 
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]
