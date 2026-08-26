@@ -26,6 +26,7 @@ class Pod:
     """A pod and its optional current values and optimization bounds."""
 
     pod_id: str
+    service_id: str | None = None
     current_cpu_request: float | None = None
     current_memory_request: float | None = None
     current_cpu_limit: float | None = None
@@ -34,6 +35,12 @@ class Pod:
     memory_request_max: float | None = None
     cpu_limit_max: float | None = None
     memory_limit_max: float | None = None
+
+    @property
+    def replica_group_id(self) -> str:
+        """Return the service grouping this pod, or a pod-local singleton."""
+
+        return self.service_id if self.service_id is not None else self.pod_id
 
 
 @dataclass(frozen=True, slots=True)

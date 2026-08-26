@@ -35,6 +35,21 @@ and memory:
 - runtime capacity in every historical scenario;
 - configurable aggregate limit overcommit per node.
 
+Pods may be declared as replicas of the same service. Let `g(i)` map pod `i`
+to its service in the set `G`. For every resource `h`, the model adds:
+
+```text
+r[i,h] = r[i_g,h]  for every i with g(i) = g
+l[i,h] = l[i_g,h]  for every i with g(i) = g
+```
+
+where `i_g` is a deterministic representative replica of service `g`. These
+linear equalities are equivalent to all pairwise equalities within a service,
+but add only a linear number of constraints. Placement remains pod-specific,
+and every replica retains its own usage scenarios and chance constraints. The
+common request and limit must therefore satisfy the requirements of every
+replica in the service.
+
 Runtime capacity uses `max(observed usage, request)` for a placed workload. The
 model remains linear by introducing effective-demand and placed-limit auxiliary
 variables instead of using nonlinear `max` expressions or products between
@@ -85,21 +100,28 @@ node-a,4,4096
 `workloads.csv`:
 
 ```csv
-workload_id,cpu_request_max,memory_request_max,cpu_limit_max,memory_limit_max
-api,4,4096,4,4096
+workload_id,service_id,cpu_request_max,memory_request_max,cpu_limit_max,memory_limit_max
+api-replica-0,api,4,4096,4,4096
+api-replica-1,api,4,4096,4,4096
 ```
 
 `usage.csv`:
 
 ```csv
 timestamp,workload_id,cpu_usage,memory_usage
-2026-08-01T10:00:00Z,api,0.5,512
+2026-08-01T10:00:00Z,api-replica-0,0.5,512
+2026-08-01T10:00:00Z,api-replica-1,0.6,540
 ```
 
 CPU values use cores and memory values use MiB internally. Usage timestamps
 must form a common aligned scenario set across all workloads. Invalid,
 incomplete, duplicate, negative, or non-finite input is rejected rather than
 silently discarded.
+
+`service_id` is optional. Pods with the same non-empty `service_id` are
+replicas and receive identical CPU/memory requests and limits. When it is
+omitted or empty, the workload is treated as a singleton service, preserving
+the behavior of datasets created before replica grouping was introduced.
 
 See [`data/examples`](data/examples) for a complete runnable dataset.
 

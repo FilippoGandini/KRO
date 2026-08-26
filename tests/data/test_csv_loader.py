@@ -31,9 +31,9 @@ def load(tmp_path: Path, **overrides: str):
 
 def test_loads_valid_inputs_and_converts_units(tmp_path: Path) -> None:
     pods = (
-        "pod_id,current_cpu_request,current_memory_request,cpu_request_max,memory_limit_max\n"
-        "pod-a,500m,1GiB,2,4GiB\n"
-        "pod-b,,,,\n"
+        "pod_id,service_id,current_cpu_request,current_memory_request,cpu_request_max,memory_limit_max\n"
+        "pod-a,api,500m,1GiB,2,4GiB\n"
+        "pod-b,api,,,,\n"
     )
 
     data = load(tmp_path, pods=pods)
@@ -41,11 +41,30 @@ def test_loads_valid_inputs_and_converts_units(tmp_path: Path) -> None:
     assert data.nodes[0].cpu_capacity == 8.0
     assert data.nodes[0].memory_capacity == 32768.0
     assert data.pods[0].current_cpu_request == 0.5
+    assert data.pods[0].service_id == "api"
+    assert data.pods[1].replica_group_id == "api"
     assert data.pods[0].current_memory_request == 1024.0
     assert data.pods[0].memory_limit_max == 4096.0
     assert data.pods[1].current_cpu_request is None
     assert data.usage_samples[0].cpu_usage == 0.25
     assert data.usage_samples[2].memory_usage == 2048.0
+
+
+def test_missing_or_empty_service_id_creates_singleton_groups(tmp_path: Path) -> None:
+    data_without_column = load(tmp_path)
+    data_with_empty_values = load(
+        tmp_path,
+        pods="pod_id,service_id\npod-a,\npod-b,   \n",
+    )
+
+    assert [pod.replica_group_id for pod in data_without_column.pods] == [
+        "pod-a",
+        "pod-b",
+    ]
+    assert [pod.replica_group_id for pod in data_with_empty_values.pods] == [
+        "pod-a",
+        "pod-b",
+    ]
 
 
 @pytest.mark.parametrize(

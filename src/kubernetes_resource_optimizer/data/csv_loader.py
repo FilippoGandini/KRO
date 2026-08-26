@@ -107,7 +107,7 @@ def load_nodes_csv(path: Path) -> tuple[Node, ...]:
 
 
 def load_pods_csv(path: Path) -> tuple[Pod, ...]:
-    """Load pods and any optional current values or upper bounds."""
+    """Load pods, their service membership, and optional resource values."""
 
     pods: list[Pod] = []
     cpu_fields = (
@@ -144,7 +144,19 @@ def load_pods_csv(path: Path) -> tuple[Pod, ...]:
                 for field in memory_fields
             }
         )
-        pods.append(Pod(pod_id=_workload_id(row, source), **values))
+        raw_service_id = row.get("service_id")
+        service_id = (
+            raw_service_id.strip()
+            if raw_service_id is not None and raw_service_id.strip()
+            else None
+        )
+        pods.append(
+            Pod(
+                pod_id=_workload_id(row, source),
+                service_id=service_id,
+                **values,
+            )
+        )
     return tuple(pods)
 
 

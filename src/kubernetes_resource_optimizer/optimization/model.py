@@ -17,13 +17,13 @@ from kubernetes_resource_optimizer.optimization.constraints import (
     add_limit_linearization_constraints,
     add_limit_overcommit_constraints,
     add_node_activation_constraints,
+    add_replica_resource_equality_constraints,
     add_request_chance_constraints,
     add_request_limit_ordering_constraints,
     add_runtime_capacity_constraints,
 )
 from kubernetes_resource_optimizer.optimization.objective import (
     set_minimum_active_nodes_and_requests_objective,
-    set_minimum_active_nodes_objective
 )
 from kubernetes_resource_optimizer.optimization.variables import (
     ModelVariables,
@@ -58,6 +58,7 @@ def build_model(
     add_request_chance_constraints(problem, data, config, resolved_bounds, variables)
     add_limit_chance_constraints(problem, data, config, resolved_bounds, variables)
     add_request_limit_ordering_constraints(problem, data, variables)
+    add_replica_resource_equality_constraints(problem, data, variables)
     add_effective_demand_constraints(problem, data, resolved_bounds, variables)
     add_runtime_capacity_constraints(problem, data, variables)
     add_limit_linearization_constraints(problem, data, resolved_bounds, variables)
