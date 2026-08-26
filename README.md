@@ -125,6 +125,30 @@ the behavior of datasets created before replica grouping was introduced.
 
 See [`data/examples`](data/examples) for a complete runnable dataset.
 
+## Preparing usage data from OCP exports
+
+The optimizer remains offline. Place CPU and memory responses exported from
+OCP/Prometheus in `data/private/json`, using matching names such as
+`pod1-cpu.json` / `pod1-mem.json` and `pod2-cpu.json` / `pod2-mem.json`.
+Then combine every pair into one usage file with the standalone utility:
+
+```console
+uv run python utils/ocp_usage_to_csv.py
+```
+
+By default this writes `data/private/usage.csv`, keeps CPU values in cores
+without conversion, and converts memory bytes to MiB. If the PromQL queries
+return other units, use `--cpu-unit` and `--memory-unit`; run the command with
+`--help` for the available choices. The workload identifier is read from the
+`pod` metric label by default and can be changed with `--metric-label`.
+
+Every CPU file must have a matching memory file containing exactly the same
+pod/timestamp observations. The output is rebuilt deterministically, so
+running the utility again does not append duplicate rows. Missing pairs and
+malformed, duplicate, negative, non-finite, or unaligned samples are rejected
+instead of being silently dropped. This preparation step is intentionally
+separate from the optimizer CLI.
+
 ## Development checks
 
 ```console
