@@ -1,3 +1,11 @@
 workload_id,cpu_request_max,memory_request_max,cpu_limit_max,memory_limit_max
-api,4,4096,4,4096
-worker,4,4096,4,4096
+api,6,8192,8,12288
+worker,8,12288,12,16384
+auth,4,4096,6,8192
+payments,6,8192,8,12288
+orders,8,12288,10,16384
+catalog,4,8192,6,12288
+search,10,16384,12,24576
+notifications,4,8192,6,12288
+reporting,8,16384,12,24576
+batch,10,16384,16,32768

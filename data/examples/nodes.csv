@@ -1,3 +1,6 @@
 node_id,cpu_capacity,memory_capacity
-node-a,4,4096
-node-b,4,4096
+node-a,8,16384
+node-b,8,16384
+node-c,8,16384
+node-d,8,16384
+node-e,8,16384
