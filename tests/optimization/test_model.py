@@ -46,7 +46,7 @@ def test_one_workload_one_node_uses_the_only_node() -> None:
     result = CbcSolver().solve(built.problem)
 
     assert result.status is SolverStatus.OPTIMAL
-    assert result.objective_value == pytest.approx(1.0)
+    assert result.objective_value == pytest.approx(4.0)
     assert built.variables.placement["pod-0", "node-0"].varValue == pytest.approx(1.0)
     assert built.variables.node_active["node-0"].varValue == pytest.approx(1.0)
 
@@ -57,7 +57,7 @@ def test_two_workloads_two_nodes_minimizes_to_one_active_node() -> None:
     result = CbcSolver().solve(built.problem)
 
     assert result.status is SolverStatus.OPTIMAL
-    assert result.objective_value == pytest.approx(1.0)
+    assert result.objective_value == pytest.approx(7.0)
     assert sum(variable.varValue for variable in built.variables.node_active.values()) == pytest.approx(1.0)
 
 
@@ -132,3 +132,4 @@ def test_model_contains_all_expected_variable_families() -> None:
         for variable in built.problem.variables()
     )
     assert built.problem.sense == pulp.LpMinimize
+    assert built.problem.objective.name == "minimum_active_nodes_and_requests"

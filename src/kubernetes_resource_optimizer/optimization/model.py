@@ -22,7 +22,8 @@ from kubernetes_resource_optimizer.optimization.constraints import (
     add_runtime_capacity_constraints,
 )
 from kubernetes_resource_optimizer.optimization.objective import (
-    set_minimum_active_nodes_objective,
+    set_minimum_active_nodes_and_requests_objective,
+    set_minimum_active_nodes_objective
 )
 from kubernetes_resource_optimizer.optimization.variables import (
     ModelVariables,
@@ -61,6 +62,8 @@ def build_model(
     add_runtime_capacity_constraints(problem, data, variables)
     add_limit_linearization_constraints(problem, data, resolved_bounds, variables)
     add_limit_overcommit_constraints(problem, data, config, variables)
-    set_minimum_active_nodes_objective(problem, variables)
+    set_minimum_active_nodes_and_requests_objective(
+        problem, variables, resolved_bounds
+    )
 
     return OptimizationModel(problem=problem, variables=variables)
