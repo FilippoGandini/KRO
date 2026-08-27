@@ -24,6 +24,12 @@ def test_generates_html_and_svg_charts(
     assert "50.00%" in document
     assert "2×" in document
     assert "epsilon" not in document
+    assert "Historical period" in document
+    assert "Scenario interval (inferred)" in document
+    assert "1h" in document
+    assert "Selected nodes" in document
+    assert "CPU capacity (cores)" in document
+    assert "Memory capacity (MiB)" in document
     assert "pod-a" in document
     assert len(tuple((index.parent / "nodes").glob("*.svg"))) == 1
     assert len(tuple((index.parent / "workloads").glob("*.svg"))) == 2

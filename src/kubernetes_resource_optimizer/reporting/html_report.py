@@ -6,6 +6,8 @@ import hashlib
 import html
 import re
 from collections.abc import Sequence
+from datetime import timedelta
+from itertools import pairwise
 from pathlib import Path
 
 from kubernetes_resource_optimizer.data.models import InputData, Resource
@@ -34,6 +36,34 @@ def _table(rows: Sequence[tuple[str, ...]], headings: tuple[str, ...]) -> str:
         for row in rows
     )
     return f"<table><thead><tr>{header}</tr></thead><tbody>{body}</tbody></table>"
+
+
+def _format_duration(duration: timedelta) -> str:
+    """Format a positive scenario interval without platform-specific APIs."""
+
+    seconds = int(duration.total_seconds())
+    if seconds % 3600 == 0:
+        hours = seconds // 3600
+        return f"{hours}h"
+    if seconds % 60 == 0:
+        minutes = seconds // 60
+        return f"{minutes}m"
+    return f"{seconds}s"
+
+
+def _scenario_interval(data: InputData) -> str:
+    """Describe timestamp spacing without claiming an unknown averaging window."""
+
+    timestamps = sorted({sample.timestamp for sample in data.usage_samples})
+    if len(timestamps) < 2:
+        return "Not available (single scenario)"
+    intervals = tuple(later - earlier for earlier, later in pairwise(timestamps))
+    if len(set(intervals)) == 1:
+        return _format_duration(intervals[0])
+    return (
+        f"Variable ({_format_duration(min(intervals))}–"
+        f"{_format_duration(max(intervals))})"
+    )
 
 
 def generate_html_report(
@@ -74,6 +104,8 @@ def generate_html_report(
         )
         workload_images.append((workload_cpu_item.workload_id, f"workloads/{filename}"))
 
+    timestamps = sorted({sample.timestamp for sample in data.usage_samples})
+    period = f"{timestamps[0].isoformat()} to {timestamps[-1].isoformat()}"
     summary = _table(
         [
             ("Solver status", result.solver_status.value),
@@ -81,6 +113,9 @@ def generate_html_report(
             ("Total node cost", f"{result.total_node_cost:g}"),
             ("Objective value", f"{result.objective_value:g}"),
             ("Solve time", f"{result.solve_time_seconds:.3f} s"),
+            ("Historical period", period),
+            ("Historical scenarios", str(len(timestamps))),
+            ("Scenario interval (inferred)", _scenario_interval(data)),
         ],
         ("Metric", "Value"),
     )
@@ -141,6 +176,20 @@ def generate_html_report(
         ],
         ("Setting", "Value", "Meaning"),
     )
+    active_node_ids = {node.node_id for node in result.nodes if node.active}
+    selected_nodes_table = _table(
+        [
+            (
+                node.node_id,
+                f"{node.cpu_capacity:g}",
+                f"{node.memory_capacity:g}",
+                f"{node.cost:g}",
+            )
+            for node in data.nodes
+            if node.node_id in active_node_ids
+        ],
+        ("Node", "CPU capacity (cores)", "Memory capacity (MiB)", "Cost"),
+    )
     node_sections = "".join(
         f'<section><h3>{html.escape(identifier)}</h3><img src="{html.escape(path)}" alt="Node {html.escape(identifier)} allocation chart"></section>'
         for identifier, path in node_images
@@ -162,6 +211,7 @@ img{{display:block;max-width:100%;height:auto;margin:auto}} .note{{padding:.8rem
 <p class="note">Effective node demand is computed as <code>max(historical usage, recommended request)</code> for each placed workload. SVG files are portable and can be opened independently.</p>
 <h2>Summary</h2>{summary}
 <h2>Optimization settings</h2>{settings_table}
+<h2>Selected nodes</h2>{selected_nodes_table}
 <h2>Recommendations</h2>{workload_table}
 <h2>Active node allocation</h2>{node_sections}
 <h2>Workload usage and boundaries</h2>{workload_sections}
