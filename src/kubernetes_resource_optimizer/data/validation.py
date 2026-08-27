@@ -38,14 +38,16 @@ def validate_input_data(data: InputData) -> None:
         errors.append("usage.csv must contain at least one usage sample")
 
     for node in data.nodes:
-        for field, value in (
+        for field, node_value in (
             ("cpu_capacity", node.cpu_capacity),
             ("memory_capacity", node.memory_capacity),
         ):
-            if not math.isfinite(value) or value <= 0:
+            if not math.isfinite(node_value) or node_value <= 0:
                 errors.append(
                     f"node {node.node_id!r} {field} must be finite and positive"
                 )
+        if not math.isfinite(node.cost) or node.cost <= 0:
+            errors.append(f"node {node.node_id!r} cost must be finite and positive")
 
     for pod in data.pods:
         optional_values = {

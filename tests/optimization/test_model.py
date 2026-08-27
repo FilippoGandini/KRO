@@ -132,4 +132,40 @@ def test_model_contains_all_expected_variable_families() -> None:
         for variable in built.problem.variables()
     )
     assert built.problem.sense == pulp.LpMinimize
-    assert built.problem.objective.name == "minimum_active_nodes_and_requests"
+    assert built.problem.objective.name == "minimum_node_cost_and_requests"
+
+
+def test_node_cost_is_primary_and_requests_only_break_cost_ties() -> None:
+    data = make_data(pod_count=1, node_count=2)
+    data = InputData(
+        nodes=(Node("cheap", 8, 8192, 0.10), Node("expensive", 8, 8192, 0.11)),
+        pods=data.pods,
+        usage_samples=data.usage_samples,
+    )
+    built = build_model(data, ZERO_RISK)
+
+    result = CbcSolver().solve(built.problem)
+
+    assert result.status is SolverStatus.OPTIMAL
+    assert built.variables.placement["pod-0", "cheap"].varValue == pytest.approx(1)
+
+
+def test_optimizer_can_choose_more_nodes_when_their_total_cost_is_lower() -> None:
+    data = make_data(pod_count=2, node_count=1)
+    data = InputData(
+        nodes=(
+            Node("large", 8, 8192, 10),
+            Node("small-a", 1, 1024, 3),
+            Node("small-b", 1, 1024, 3),
+        ),
+        pods=data.pods,
+        usage_samples=data.usage_samples,
+    )
+    built = build_model(data, ZERO_RISK)
+
+    result = CbcSolver().solve(built.problem)
+
+    assert result.status is SolverStatus.OPTIMAL
+    assert built.variables.node_active["large"].varValue == pytest.approx(0)
+    assert built.variables.node_active["small-a"].varValue == pytest.approx(1)
+    assert built.variables.node_active["small-b"].varValue == pytest.approx(1)

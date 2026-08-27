@@ -27,5 +27,6 @@ def test_cli_optimizes_example_csv_files(
     output = capsys.readouterr().out
     assert "Solver status: optimal" in output
     assert "Active nodes: 4/5" in output
+    assert "Total node cost: 4" in output
     assert "api-replica-0 ->" in output
     assert "api-replica-1 ->" in output

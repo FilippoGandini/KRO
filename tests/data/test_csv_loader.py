@@ -40,6 +40,7 @@ def test_loads_valid_inputs_and_converts_units(tmp_path: Path) -> None:
 
     assert data.nodes[0].cpu_capacity == 8.0
     assert data.nodes[0].memory_capacity == 32768.0
+    assert data.nodes[0].cost == 1.0
     assert data.pods[0].current_cpu_request == 0.5
     assert data.pods[0].service_id == "api"
     assert data.pods[1].replica_group_id == "api"
@@ -48,6 +49,25 @@ def test_loads_valid_inputs_and_converts_units(tmp_path: Path) -> None:
     assert data.pods[1].current_cpu_request is None
     assert data.usage_samples[0].cpu_usage == 0.25
     assert data.usage_samples[2].memory_usage == 2048.0
+
+
+def test_loads_node_cost(tmp_path: Path) -> None:
+    data = load(
+        tmp_path,
+        nodes="node_id,cpu_capacity,memory_capacity,cost\nnode-1,8,32768,0.125\n",
+    )
+
+    assert data.nodes[0].cost == pytest.approx(0.125)
+
+
+@pytest.mark.parametrize("cost", ["0", "-1", "nan", "inf"])
+def test_rejects_non_positive_or_non_finite_node_cost(
+    tmp_path: Path, cost: str
+) -> None:
+    nodes = f"node_id,cpu_capacity,memory_capacity,cost\nnode-1,8,32768,{cost}\n"
+
+    with pytest.raises(InputValidationError, match="cost must be finite and positive"):
+        load(tmp_path, nodes=nodes)
 
 
 def test_missing_or_empty_service_id_creates_singleton_groups(tmp_path: Path) -> None:

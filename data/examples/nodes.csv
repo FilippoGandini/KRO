@@ -1,6 +1,6 @@
-node_id,cpu_capacity,memory_capacity
-node-a,8,16384
-node-b,8,16384
-node-c,8,16384
-node-d,8,16384
-node-e,8,16384
+node_id,cpu_capacity,memory_capacity,cost
+node-a,8,16384,1
+node-b,8,16384,1
+node-c,8,16384,1
+node-d,8,16384,1
+node-e,8,16384,1

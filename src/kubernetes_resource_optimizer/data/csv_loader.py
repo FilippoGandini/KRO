@@ -81,11 +81,12 @@ def _optional_quantity(
 
 
 def load_nodes_csv(path: Path) -> tuple[Node, ...]:
-    """Load candidate nodes; values are converted to cores and MiB."""
+    """Load candidate nodes; resource values are converted to canonical units."""
 
     nodes: list[Node] = []
     for line, row in _rows(path, {"node_id", "cpu_capacity", "memory_capacity"}):
         source = f"{path.name} line {line}"
+        cost = _optional_quantity(row, "cost", source, float)
         nodes.append(
             Node(
                 node_id=_required(row, "node_id", source),
@@ -101,6 +102,7 @@ def load_nodes_csv(path: Path) -> tuple[Node, ...]:
                     source,
                     lambda value: parse_memory_mib(value, field="memory_capacity"),
                 ),
+                cost=1.0 if cost is None else cost,
             )
         )
     return tuple(nodes)

@@ -40,6 +40,7 @@ def _print_summary(result: OptimizationResult) -> None:
 
     print(f"Solver status: {result.solver_status.value}")
     print(f"Active nodes: {result.active_node_count}/{len(result.nodes)}")
+    print(f"Total node cost: {result.total_node_cost:g}")
     print(f"Objective value: {result.objective_value:g}")
     print(f"Solve time: {result.solve_time_seconds:.3f}s")
     print("Workload recommendations:")

@@ -23,6 +23,7 @@ class NodeResult:
     """Activation and assigned workloads for one candidate node."""
 
     node_id: str
+    cost: float
     active: bool
     assigned_workloads: tuple[str, ...]
 
@@ -56,6 +57,7 @@ class OptimizationResult:
 
     solver_status: SolverStatus
     objective_value: float
+    total_node_cost: float
     active_node_count: int
     solve_time_seconds: float
     workloads: tuple[WorkloadResult, ...]

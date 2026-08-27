@@ -103,6 +103,7 @@ def extract_solution(
     nodes = tuple(
         NodeResult(
             node_id=node.node_id,
+            cost=node.cost,
             active=_value(variables.node_active[node.node_id]) > _BINARY_THRESHOLD,
             assigned_workloads=tuple(sorted(assigned_by_node[node.node_id])),
         )
@@ -181,6 +182,11 @@ def extract_solution(
     return OptimizationResult(
         solver_status=solver_result.status,
         objective_value=solver_result.objective_value,
+        total_node_cost=sum(
+            node.cost
+            for node, result in zip(data.nodes, nodes, strict=True)
+            if result.active
+        ),
         active_node_count=sum(node.active for node in nodes),
         solve_time_seconds=solver_result.solve_time_seconds,
         workloads=workloads,

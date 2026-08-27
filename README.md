@@ -9,7 +9,7 @@ jointly recommends:
 - CPU and memory requests;
 - CPU and memory limits;
 - one candidate node for each workload;
-- the minimum set of candidate nodes required by the solution.
+- the minimum-cost set of candidate nodes required by the solution.
 
 The project is intentionally offline. It reads local CSV files and does not
 connect to Kubernetes, OpenShift, Prometheus, cloud APIs, or any other external
@@ -25,7 +25,7 @@ formats may still change before the first stable release.
 ## Mathematical model
 
 Historical observations are treated as aligned demand scenarios. The primary
-objective minimizes the number of active nodes while enforcing, for both CPU
+objective minimizes the total cost of active nodes while enforcing, for both CPU
 and memory:
 
 - exactly one placement per workload;
@@ -55,9 +55,13 @@ model remains linear by introducing effective-demand and placed-limit auxiliary
 variables instead of using nonlinear `max` expressions or products between
 decision variables.
 
-The current objective only minimizes active nodes. Requests and limits are not
-yet subject to a secondary objective, so multiple optimal configurations may
-exist.
+The objective is lexicographic: it first minimizes total active-node cost and
+then minimizes normalized CPU and memory requests among configurations with the
+same cost. Each request is divided by its workload/resource upper bound so CPU
+cores and memory MiB are comparable. The implementation uniformly scales the
+cost term using the exact decimal quantum shared by the configured costs; this
+keeps their relative proportions unchanged and ensures that the secondary term
+cannot overturn even the smallest non-zero cost difference.
 
 ## Requirements
 
@@ -93,8 +97,8 @@ The CLI expects three CSV files.
 `nodes.csv`:
 
 ```csv
-node_id,cpu_capacity,memory_capacity
-node-a,4,4096
+node_id,cpu_capacity,memory_capacity,cost
+node-a,4,4096,0.25
 ```
 
 `workloads.csv`:
@@ -117,6 +121,11 @@ CPU values use cores and memory values use MiB internally. Usage timestamps
 must form a common aligned scenario set across all workloads. Invalid,
 incomplete, duplicate, negative, or non-finite input is rejected rather than
 silently discarded.
+
+Node `cost` must be finite and positive. It may represent any consistent cost
+unit (for example, hourly currency cost). The column is optional for backward
+compatibility and defaults to `1`, which recovers minimum active-node count as
+the primary objective when all nodes have the same cost.
 
 `service_id` is optional. Pods with the same non-empty `service_id` are
 replicas and receive identical CPU/memory requests and limits. When it is
@@ -165,8 +174,6 @@ uv run mypy src
 - one local solver backend;
 - human-readable CLI output only;
 - no cluster changes, controllers, operators, or real-time autoscaling;
-- no secondary objective for selecting among solutions with the same minimum
-  node count.
 
 ## Roadmap
 

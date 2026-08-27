@@ -14,11 +14,12 @@ class Resource(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class Node:
-    """A candidate node, with CPU in cores and memory in MiB."""
+    """A candidate node, with resources in canonical units and a positive cost."""
 
     node_id: str
     cpu_capacity: float
     memory_capacity: float
+    cost: float = 1.0
 
 
 @dataclass(frozen=True, slots=True)
