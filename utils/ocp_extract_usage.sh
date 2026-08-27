@@ -126,8 +126,6 @@ END=$(( NOW / STEP * STEP ))
 PERIOD_START=$(( END - PERIOD_SECONDS ))
 START=$(( PERIOD_START + STEP ))
 
-CPU_TMP=$(mktemp)
-MEM_TMP=$(mktemp)
 
 mkdir -p "$OUTPUT_DIR"
 
