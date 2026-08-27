@@ -1,82 +1,80 @@
 # Kubernetes Resource Optimizer
 
-An offline Mixed-Integer Linear Programming (MILP) optimizer for joint
-Kubernetes workload rightsizing and placement.
+Kubernetes Resource Optimizer (KRO) is an offline tool that uses historical CPU
+and memory data to determine jointly:
 
-Given candidate nodes and historical CPU and memory observations, the optimizer
-jointly recommends:
+- the requests and limits of each workload;
+- the candidate node on which each workload should be placed;
+- the subset of nodes to activate while minimizing total node cost.
 
-- CPU and memory requests;
-- CPU and memory limits;
-- one candidate node for each workload;
-- the minimum-cost set of candidate nodes required by the solution.
+The problem is formulated as a Mixed-Integer Linear Program (MILP).
+Its primary objective is to minimize the total cost associated to the active nodes.
+Recommendations satisfy capacity constraints in every historical scenario,
+configurable tolerances for request and limit exceedances, and configurable
+limit-overcommit thresholds. Workloads with complementary temporal profiles may
+share a node when their aggregate demand remains compatible with the node capacity.
 
-The project is intentionally offline. It reads local CSV files and does not
-connect to Kubernetes, OpenShift, Prometheus, cloud APIs, or any other external
-service.
+The project does not connect to Kubernetes, OpenShift, or Prometheus and never
+changes a cluster. All inputs are local CSV files. The formulation, assumptions,
+parameters, and limitations are described in the documentation under `docs/`
+(soon available).
 
-## Project status
-
-This project is in early development. The core version 1 MILP, CSV input layer,
-CBC solver integration, structured result extraction, diagnostics, and a small
-CLI are implemented and covered by deterministic tests. Interfaces and output
-formats may still change before the first stable release.
-
-## Mathematical model
-
-Historical observations are treated as aligned demand scenarios. The primary
-objective minimizes the total cost of active nodes while enforcing, for both CPU
-and memory:
-
-- exactly one placement per workload;
-- placement only on active nodes;
-- request and limit chance constraints with configurable risk tolerances;
-- `request <= limit` and explicit workload upper bounds;
-- runtime capacity in every historical scenario;
-- configurable aggregate limit overcommit per node.
-
-Pods may be declared as replicas of the same service. Let `g(i)` map pod `i`
-to its service in the set `G`. For every resource `h`, the model adds:
-
-```text
-r[i,h] = r[i_g,h]  for every i with g(i) = g
-l[i,h] = l[i_g,h]  for every i with g(i) = g
-```
-
-where `i_g` is a deterministic representative replica of service `g`. These
-linear equalities are equivalent to all pairwise equalities within a service,
-but add only a linear number of constraints. Placement remains pod-specific,
-and every replica retains its own usage scenarios and chance constraints. The
-common request and limit must therefore satisfy the requirements of every
-replica in the service.
-
-Runtime capacity uses `max(observed usage, request)` for a placed workload. The
-model remains linear by introducing effective-demand and placed-limit auxiliary
-variables instead of using nonlinear `max` expressions or products between
-decision variables.
-
-The objective is lexicographic: it first minimizes total active-node cost and
-then minimizes normalized CPU and memory requests among configurations with the
-same cost. Each request is divided by its workload/resource upper bound so CPU
-cores and memory MiB are comparable. The implementation uniformly scales the
-cost term using the exact decimal quantum shared by the configured costs; this
-keeps their relative proportions unchanged and ensures that the secondary term
-cannot overturn even the smallest non-zero cost difference.
-
-## Requirements
+## Requirements and installation
 
 - Python 3.12 or newer
-- [uv](https://docs.astral.sh/uv/) for the documented development workflow
+- [uv](https://docs.astral.sh/uv/)
 
-PuLP is used to build the MILP and its bundled CBC integration is used to solve
-it locally.
-
-## Run the included example
-
-Install the locked dependencies and run the optimizer from the repository root:
+From the repository root:
 
 ```console
 uv sync
+```
+
+PuLP builds the MILP and CBC solves it locally. No external service or
+credentials are required.
+
+## Preparing the inputs
+
+Create three CSV files. CPU values use cores and memory values use MiB. Every
+workload must have the same set of timestamps.
+
+`nodes.csv`:
+
+```csv
+node_id,cpu_capacity,memory_capacity,cost
+node-a,4,4096,0.25
+node-b,8,8192,0.40
+```
+
+`workloads.csv`:
+
+```csv
+workload_id,service_id,cpu_request_max,memory_request_max,cpu_limit_max,memory_limit_max
+api-0,api,4,4096,4,4096
+api-1,api,4,4096,4,4096
+```
+
+`service_id` and the four maximum values are optional. Replicas with the same
+`service_id` receive identical requests and limits. A missing node `cost`
+defaults to `1`.
+
+`usage.csv`:
+
+```csv
+timestamp,workload_id,cpu_usage,memory_usage
+2026-08-01T10:00:00Z,api-0,0.50,512
+2026-08-01T10:00:00Z,api-1,0.60,540
+2026-08-01T11:00:00Z,api-0,0.80,620
+2026-08-01T11:00:00Z,api-1,0.45,500
+```
+
+Complete example files are available in [`data/examples`](data/examples). Empty,
+misaligned, duplicate, negative, non-finite, incomplete, or otherwise invalid
+inputs are rejected explicitly.
+
+## Running the optimizer
+
+```console
 uv run kubernetes-resource-optimizer \
   --nodes data/examples/nodes.csv \
   --workloads data/examples/workloads.csv \
@@ -84,88 +82,24 @@ uv run kubernetes-resource-optimizer \
   --output-dir output/example
 ```
 
-When `--output-dir` is provided, the optimizer creates a portable static
-`index.html` report with SVG charts. For each active node, stacked areas show
-`max(historical usage, recommended request)` per workload and the physical
-capacity, aggregate request, aggregate limit, and configured limit-overcommit
-boundary. Per-workload charts show historical usage together with request and
-limit boundaries and highlight observed violations. The report does not need a
-web server and can be opened in any modern browser on macOS, Windows, or Linux.
-
-The shorter `uv run kro` command is also available. Run the CLI help to inspect
-the configurable request-risk, limit-risk, and limit-overcommit options:
+The short alias is `uv run kro`. Risk tolerances and limit-overcommit factors
+are configurable. See all options with:
 
 ```console
-uv run kubernetes-resource-optimizer --help
+uv run kro --help
 ```
 
-## Input files
+## Results
 
-The CLI expects three CSV files.
+The terminal output includes solver status, active-node count and cost, solve
+time, placement, and recommended requests and limits. When `--output-dir` is
+provided, the optimizer creates a portable `index.html` report with tables and
+SVG charts. Open it directly in a browser; no web server is required.
 
-`nodes.csv`:
 
-```csv
-node_id,cpu_capacity,memory_capacity,cost
-node-a,4,4096,0.25
-```
 
-`workloads.csv`:
-
-```csv
-workload_id,service_id,cpu_request_max,memory_request_max,cpu_limit_max,memory_limit_max
-api-replica-0,api,4,4096,4,4096
-api-replica-1,api,4,4096,4,4096
-```
-
-`usage.csv`:
-
-```csv
-timestamp,workload_id,cpu_usage,memory_usage
-2026-08-01T10:00:00Z,api-replica-0,0.5,512
-2026-08-01T10:00:00Z,api-replica-1,0.6,540
-```
-
-CPU values use cores and memory values use MiB internally. Usage timestamps
-must form a common aligned scenario set across all workloads. Invalid,
-incomplete, duplicate, negative, or non-finite input is rejected rather than
-silently discarded.
-
-Node `cost` must be finite and positive. It may represent any consistent cost
-unit (for example, hourly currency cost). The column is optional for backward
-compatibility and defaults to `1`, which recovers minimum active-node count as
-the primary objective when all nodes have the same cost.
-
-`service_id` is optional. Pods with the same non-empty `service_id` are
-replicas and receive identical CPU/memory requests and limits. When it is
-omitted or empty, the workload is treated as a singleton service, preserving
-the behavior of datasets created before replica grouping was introduced.
-
-See [`data/examples`](data/examples) for a complete runnable dataset.
-
-## Preparing usage data from OCP exports
-
-The optimizer remains offline. Place CPU and memory responses exported from
-OCP/Prometheus in `data/private/json`, using matching names such as
-`pod1-cpu.json` / `pod1-mem.json` and `pod2-cpu.json` / `pod2-mem.json`.
-Then combine every pair into one usage file with the standalone utility:
-
-```console
-uv run python utils/ocp_usage_to_csv.py
-```
-
-By default this writes `data/private/usage.csv`, keeps CPU values in cores
-without conversion, and converts memory bytes to MiB. If the PromQL queries
-return other units, use `--cpu-unit` and `--memory-unit`; run the command with
-`--help` for the available choices. The workload identifier is read from the
-`pod` metric label by default and can be changed with `--metric-label`.
-
-Every CPU file must have a matching memory file containing exactly the same
-pod/timestamp observations. The output is rebuilt deterministically, so
-running the utility again does not append duplicate rows. Missing pairs and
-malformed, duplicate, negative, non-finite, or unaligned samples are rejected
-instead of being silently dropped. This preparation step is intentionally
-separate from the optimizer CLI.
+The command writes `data/private/usage.csv` by default. Use `--help` for the
+supported units and metric-label options.
 
 ## Development checks
 
@@ -174,19 +108,3 @@ uv run pytest
 uv run ruff check .
 uv run mypy src
 ```
-
-## Current limitations
-
-- static workloads and candidate nodes only;
-- historical scenarios only; no forecasts or live metrics;
-- CPU and memory only;
-- one local solver backend;
-- static HTML/SVG reporting only; no interactive dashboard;
-- no cluster changes, controllers, operators, or real-time autoscaling;
-
-## Roadmap
-
-Near-term work includes strengthening type checking, expanding diagnostics and
-reporting, adding export formats, improving infeasibility explanations, and
-covering larger integration scenarios. The MILP remains the core model; simple
-percentile heuristics are not used as a replacement for it.
