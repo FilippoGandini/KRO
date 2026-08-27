@@ -80,8 +80,17 @@ uv sync
 uv run kubernetes-resource-optimizer \
   --nodes data/examples/nodes.csv \
   --workloads data/examples/workloads.csv \
-  --usage data/examples/usage.csv
+  --usage data/examples/usage.csv \
+  --output-dir output/example
 ```
+
+When `--output-dir` is provided, the optimizer creates a portable static
+`index.html` report with SVG charts. For each active node, stacked areas show
+`max(historical usage, recommended request)` per workload and the physical
+capacity, aggregate request, aggregate limit, and configured limit-overcommit
+boundary. Per-workload charts show historical usage together with request and
+limit boundaries and highlight observed violations. The report does not need a
+web server and can be opened in any modern browser on macOS, Windows, or Linux.
 
 The shorter `uv run kro` command is also available. Run the CLI help to inspect
 the configurable request-risk, limit-risk, and limit-overcommit options:
@@ -172,7 +181,7 @@ uv run mypy src
 - historical scenarios only; no forecasts or live metrics;
 - CPU and memory only;
 - one local solver backend;
-- human-readable CLI output only;
+- static HTML/SVG reporting only; no interactive dashboard;
 - no cluster changes, controllers, operators, or real-time autoscaling;
 
 ## Roadmap

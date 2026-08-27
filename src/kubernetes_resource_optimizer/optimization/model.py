@@ -24,8 +24,6 @@ from kubernetes_resource_optimizer.optimization.constraints import (
 )
 from kubernetes_resource_optimizer.optimization.objective import (
     set_minimum_node_cost_and_requests_objective,
-    set_minimum_nodes_cost_objective
-    
 )
 from kubernetes_resource_optimizer.optimization.variables import (
     ModelVariables,

@@ -17,6 +17,7 @@ __pycache__/
 
 data/private/
 results/
+output/
 
 # Local project instructions; not part of the public repository.
 AGENTS.md

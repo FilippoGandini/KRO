@@ -11,6 +11,7 @@ from kubernetes_resource_optimizer.data.validation import InputValidationError
 from kubernetes_resource_optimizer.optimization.config import OptimizationConfig
 from kubernetes_resource_optimizer.optimization.model import build_model
 from kubernetes_resource_optimizer.optimization.solver import CbcSolver, SolverStatus
+from kubernetes_resource_optimizer.reporting import generate_html_report
 from kubernetes_resource_optimizer.solution import OptimizationResult, extract_solution
 
 
@@ -32,6 +33,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--epsilon-memory-limit", type=float, default=0.01)
     parser.add_argument("--cpu-limit-overcommit", type=float, default=1.5)
     parser.add_argument("--memory-limit-overcommit", type=float, default=1.5)
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        help="Generate a static HTML/SVG report in this directory.",
+    )
     return parser
 
 
@@ -81,4 +87,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     result = extract_solution(data, model, solver_result)
     _print_summary(result)
+    if args.output_dir is not None:
+        report_path = generate_html_report(data, result, config, args.output_dir)
+        print(f"Report: {report_path}")
     return 0
