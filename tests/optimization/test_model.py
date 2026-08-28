@@ -46,7 +46,7 @@ def test_one_workload_one_node_uses_the_only_node() -> None:
     result = CbcSolver().solve(built.problem)
 
     assert result.status is SolverStatus.OPTIMAL
-    assert result.objective_value == pytest.approx(4.0)
+    assert result.objective_value == pytest.approx(3.2777777778)
     assert built.variables.placement["pod-0", "node-0"].varValue == pytest.approx(1.0)
     assert built.variables.node_active["node-0"].varValue == pytest.approx(1.0)
 
@@ -57,7 +57,7 @@ def test_two_workloads_two_nodes_minimizes_to_one_active_node() -> None:
     result = CbcSolver().solve(built.problem)
 
     assert result.status is SolverStatus.OPTIMAL
-    assert result.objective_value == pytest.approx(7.0)
+    assert result.objective_value == pytest.approx(6.2333333333)
     assert sum(variable.varValue for variable in built.variables.node_active.values()) == pytest.approx(1.0)
 
 
@@ -115,7 +115,7 @@ def test_request_and_limit_variables_use_derived_upper_bounds() -> None:
 def test_model_contains_all_expected_variable_families() -> None:
     built = build_model(make_data(pod_count=2, node_count=2), ZERO_RISK)
 
-    assert len(built.problem.variables()) == 38
+    assert len(built.problem.variables()) == 40
     assert all(
         variable.name.startswith(
             (
@@ -127,12 +127,49 @@ def test_model_contains_all_expected_variable_families() -> None:
                 "limit_violation_",
                 "effective_demand_",
                 "placed_limit_",
+                "minimum_limit_headroom_",
             )
         )
         for variable in built.problem.variables()
     )
     assert built.problem.sense == pulp.LpMinimize
-    assert built.problem.objective.name == "minimum_node_cost_and_requests"
+    assert (
+        built.problem.objective.name
+        == "lexicographic_node_cost_requests_fairness_and_limits"
+    )
+
+
+def test_limit_headroom_is_distributed_fairly_after_requests_are_minimized() -> None:
+    pods = tuple(
+        Pod(
+            f"pod-{index}",
+            cpu_request_max=10,
+            memory_request_max=1000,
+            cpu_limit_max=10,
+            memory_limit_max=1000,
+        )
+        for index in range(2)
+    )
+    data = InputData(
+        nodes=(Node("node-0", 10, 1000),),
+        pods=pods,
+        usage_samples=tuple(
+            UsageSample(TIMESTAMP, pod.pod_id, 1, 100) for pod in pods
+        ),
+    )
+    config = OptimizationConfig(0, 0, 0, 0, 1, 1)
+    built = build_model(data, config)
+
+    result = CbcSolver().solve(built.problem)
+
+    assert result.status is SolverStatus.OPTIMAL
+    for pod in pods:
+        assert built.variables.request[pod.pod_id, Resource.CPU].varValue == pytest.approx(1)
+        assert built.variables.request[pod.pod_id, Resource.MEMORY].varValue == pytest.approx(100)
+        assert built.variables.limit[pod.pod_id, Resource.CPU].varValue == pytest.approx(5)
+        assert built.variables.limit[pod.pod_id, Resource.MEMORY].varValue == pytest.approx(500)
+    assert built.variables.minimum_limit_headroom[Resource.CPU].varValue == pytest.approx(0.4)
+    assert built.variables.minimum_limit_headroom[Resource.MEMORY].varValue == pytest.approx(0.4)
 
 
 def test_node_cost_is_primary_and_requests_only_break_cost_ties() -> None:

@@ -32,7 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--epsilon-cpu-limit", type=float, default=0.01)
     parser.add_argument("--epsilon-memory-limit", type=float, default=0.01)
     parser.add_argument("--cpu-limit-overcommit", type=float, default=1.5)
-    parser.add_argument("--memory-limit-overcommit", type=float, default=1.5)
+    parser.add_argument("--memory-limit-overcommit", type=float, default=1.25)
     parser.add_argument(
         "--output-dir",
         type=Path,

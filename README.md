@@ -8,7 +8,9 @@ and memory data to determine jointly:
 - the subset of nodes to activate while minimizing total node cost.
 
 The problem is formulated as a Mixed-Integer Linear Program (MILP).
-Its primary objective is to minimize the total cost associated to the active nodes.
+Its objective first minimizes the total cost associated to the active nodes,
+then minimizes normalized requests, maximizes fair normalized limit headroom,
+and finally maximizes normalized limits with the remaining node budget.
 Recommendations satisfy capacity constraints in every historical scenario,
 configurable tolerances for request and limit exceedances, and configurable
 limit-overcommit thresholds. Workloads with complementary temporal profiles may
@@ -16,8 +18,8 @@ share a node when their aggregate demand remains compatible with the node capaci
 
 The project does not connect to Kubernetes, OpenShift, or Prometheus and never
 changes a cluster. All inputs are local CSV files. The formulation, assumptions,
-parameters, and limitations are described in the documentation under `docs/`
-(soon available).
+parameters, and limitations are described in the
+docs/.
 
 ## Requirements and installation
 

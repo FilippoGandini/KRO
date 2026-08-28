@@ -26,6 +26,7 @@ class ModelVariables:
     limit_violation: dict[ViolationKey, pulp.LpVariable]
     effective_demand: dict[EffectiveDemandKey, pulp.LpVariable]
     placed_limit: dict[PlacedLimitKey, pulp.LpVariable]
+    minimum_limit_headroom: dict[Resource, pulp.LpVariable]
 
 
 def create_variables(
@@ -99,6 +100,12 @@ def create_variables(
         for node in data.nodes
         for resource in Resource
     }
+    minimum_limit_headroom = {
+        resource: model.add_variable(
+            f"minimum_limit_headroom[{resource.value}]", lowBound=0, upBound=1
+        )
+        for resource in Resource
+    }
     return ModelVariables(
         placement,
         node_active,
@@ -108,4 +115,5 @@ def create_variables(
         limit_violation,
         effective_demand,
         placed_limit,
+        minimum_limit_headroom,
     )

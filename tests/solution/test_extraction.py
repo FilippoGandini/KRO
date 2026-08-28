@@ -87,7 +87,7 @@ def test_extracts_workloads_nodes_and_summary() -> None:
     result = extract_solution(data, built, solver_result)
 
     assert result.solver_status is SolverStatus.OPTIMAL
-    assert result.objective_value == pytest.approx(5.8875)
+    assert result.objective_value == pytest.approx(5.7483333333)
     assert result.active_node_count == 1
     assert result.total_node_cost == pytest.approx(1.0)
     assert result.solve_time_seconds == solver_result.solve_time_seconds

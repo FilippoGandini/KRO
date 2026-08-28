@@ -13,7 +13,9 @@ from kubernetes_resource_optimizer.optimization.config import OptimizationConfig
 from kubernetes_resource_optimizer.optimization.constraints import (
     add_assignment_constraints,
     add_effective_demand_constraints,
+    add_equivalent_node_activation_order_constraints,
     add_limit_chance_constraints,
+    add_limit_headroom_fairness_constraints,
     add_limit_linearization_constraints,
     add_limit_overcommit_constraints,
     add_node_activation_constraints,
@@ -23,7 +25,7 @@ from kubernetes_resource_optimizer.optimization.constraints import (
     add_runtime_capacity_constraints,
 )
 from kubernetes_resource_optimizer.optimization.objective import (
-    set_minimum_node_cost_and_requests_objective,
+    set_lexicographic_rightsizing_objective,
 )
 from kubernetes_resource_optimizer.optimization.variables import (
     ModelVariables,
@@ -55,6 +57,7 @@ def build_model(
 
     add_assignment_constraints(problem, data, variables)
     add_node_activation_constraints(problem, data, variables)
+    add_equivalent_node_activation_order_constraints(problem, data, variables)
     add_request_chance_constraints(problem, data, config, resolved_bounds, variables)
     add_limit_chance_constraints(problem, data, config, resolved_bounds, variables)
     add_request_limit_ordering_constraints(problem, data, variables)
@@ -63,7 +66,10 @@ def build_model(
     add_runtime_capacity_constraints(problem, data, variables)
     add_limit_linearization_constraints(problem, data, resolved_bounds, variables)
     add_limit_overcommit_constraints(problem, data, config, variables)
-    set_minimum_node_cost_and_requests_objective(
+    add_limit_headroom_fairness_constraints(
+        problem, data, resolved_bounds, variables
+    )
+    set_lexicographic_rightsizing_objective(
         problem, data, variables, resolved_bounds
     )
 

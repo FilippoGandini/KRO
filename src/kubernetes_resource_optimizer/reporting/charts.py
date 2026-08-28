@@ -45,7 +45,7 @@ def _configure_scenario_axis(axis: plt.Axes, timestamps: tuple[datetime, ...]) -
         rotation=30,
         ha="right",
     )
-    axis.set_xlabel("Historical scenario")
+    axis.set_xlabel("Time")
 
 
 def save_node_chart(cpu: NodeSeries, memory: NodeSeries, destination: Path) -> None:

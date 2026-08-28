@@ -67,3 +67,29 @@ def add_limit_overcommit_constraints(
                 * variables.node_active[node.node_id],
                 f"limit_overcommit[{node.node_id},{resource.value}]",
             )
+
+
+def add_limit_headroom_fairness_constraints(
+    model: pulp.LpProblem,
+    data: InputData,
+    bounds: DerivedBounds,
+    variables: ModelVariables,
+) -> None:
+    """Bound alpha[h] by every workload's normalized limit headroom.
+
+    Since L_max[i,h] is a finite parameter, the expression
+    ``(l[i,h] - r[i,h]) / L_max[i,h]`` is linear.
+    """
+
+    for pod in data.pods:
+        for resource in Resource:
+            limit_upper = bounds.limit_upper[pod.pod_id, resource]
+            model += (
+                variables.minimum_limit_headroom[resource]
+                <= (
+                    variables.limit[pod.pod_id, resource]
+                    - variables.request[pod.pod_id, resource]
+                )
+                / limit_upper,
+                f"minimum_limit_headroom_bound[{pod.pod_id},{resource.value}]",
+            )

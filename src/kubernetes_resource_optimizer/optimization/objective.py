@@ -7,7 +7,7 @@ from typing import cast
 
 import pulp
 
-from kubernetes_resource_optimizer.data.models import InputData
+from kubernetes_resource_optimizer.data.models import InputData, Resource
 from kubernetes_resource_optimizer.optimization.bounds import DerivedBounds
 from kubernetes_resource_optimizer.optimization.variables import ModelVariables
 
@@ -67,4 +67,58 @@ def set_minimum_node_cost_and_requests_objective(
         )
         + pulp.lpSum(normalized_requests),
         "minimum_node_cost_and_requests",
+    )
+
+
+def set_lexicographic_rightsizing_objective(
+    model: pulp.LpProblem,
+    data: InputData,
+    variables: ModelVariables,
+    bounds: DerivedBounds,
+) -> None:
+    """Minimize node cost and requests, then maximize fair limit headroom.
+
+    ``minimum_limit_headroom[h]`` is bounded by every workload's normalized
+    limit headroom ``(l[i,h] - r[i,h]) / L_max[i,h]``. Maximizing it implements
+    max-min fairness independently for CPU and memory. The fourth term then
+    maximizes all normalized limits to use residual overcommit capacity.
+
+    The limit rewards are collectively smaller than one normalized-request
+    unit. They do not weaken the existing node-cost dominance and cannot make
+    a larger request attractive: increasing a request only tightens runtime
+    capacity and the headroom constraints. Thus the existing request minimum
+    remains dominant before the fair-limit objective.
+    """
+
+    normalized_requests = [
+        variables.request[key] / upper_bound
+        for key, upper_bound in bounds.request_upper.items()
+        if upper_bound > 0
+    ]
+    normalized_limits = [
+        variables.limit[key] / upper_bound
+        for key, upper_bound in bounds.limit_upper.items()
+        if upper_bound > 0
+    ]
+
+    # The reward is strictly smaller than one. This keeps it below the
+    # coefficient of one normalized request term.
+    reward_denominator = len(Resource) + 1
+    fairness_reward = (
+        pulp.lpSum(variables.minimum_limit_headroom.values()) / reward_denominator
+    )
+    residual_limit_reward = (
+        pulp.lpSum(normalized_limits)
+        / (reward_denominator * (len(normalized_limits) + 1))
+    )
+    cost_coefficient = (len(normalized_requests) + 1) / _cost_quantum(data)
+    model += (
+        cost_coefficient
+        * pulp.lpSum(
+            node.cost * variables.node_active[node.node_id] for node in data.nodes
+        )
+        + pulp.lpSum(normalized_requests)
+        - fairness_reward
+        - residual_limit_reward,
+        "lexicographic_node_cost_requests_fairness_and_limits",
     )
