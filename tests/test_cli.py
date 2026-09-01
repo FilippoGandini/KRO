@@ -20,17 +20,13 @@ def test_cli_optimizes_example_csv_files(
             str(example_dir / "workloads.csv"),
             "--usage",
             str(example_dir / "usage.csv"),
-            "--solver",
-            "cbc",
-            "--time-limit-seconds",
-            "10",
         ]
     )
 
     assert exit_code == 0
     output = capsys.readouterr().out
-    assert "Solver: CBC" in output
-    assert "Solver status: feasible" in output or "Solver status: optimal" in output
+    assert "Solver: HiGHS" in output
+    assert "Solver status: optimal" in output
     assert "Active nodes: 4/5" in output
     assert "Total node cost: 4" in output
     assert "api-replica-0 ->" in output

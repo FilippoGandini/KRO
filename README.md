@@ -32,11 +32,12 @@ From the repository root:
 uv sync
 ```
 
-PuLP builds the MILP. HiGHS (the default) and CBC are supported through local
-command-line executables; the optimizer makes no remote API calls.
-See the [HiGHS installation documentation](https://github.com/ERGO-Code/HiGHS#installation)
-for binaries and source builds. CBC remains available through the executable
-bundled with PuLP.
+PuLP builds the MILP. HiGHS is the default and runs locally in-process through
+the `highspy` dependency; CBC remains available through the executable bundled
+with PuLP. The optimizer makes no remote API calls. `uv sync` installs HiGHS
+automatically from the locked project dependencies. See the
+[HiGHS installation documentation](https://github.com/ERGO-Code/HiGHS#installation)
+for alternative installation methods.
 
 ## Preparing the inputs
 

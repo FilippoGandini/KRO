@@ -31,6 +31,20 @@ def test_cbc_solves_tiny_binary_milp() -> None:
     assert model.get_constraint_by_name("minimum_coverage") is not None
 
 
+def test_highs_solves_tiny_binary_milp_in_process() -> None:
+    model = pulp.LpProblem("tiny_highs_binary_milp", pulp.LpMinimize)
+    selected = model.add_variable("selected", cat=pulp.LpBinary)
+    model += selected
+    model += selected >= 1, "must_select"
+
+    result = HighsSolver().solve(model)
+
+    assert result.status is SolverStatus.OPTIMAL
+    assert result.objective_value == pytest.approx(1.0)
+    assert result.solver is SolverName.HIGHS
+    assert selected.varValue == pytest.approx(1.0)
+
+
 def test_integer_feasible_incumbent_is_not_reported_as_optimal() -> None:
     status = _normalize_status(
         pulp.LpStatusOptimal,

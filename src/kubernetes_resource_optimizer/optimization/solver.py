@@ -1,4 +1,4 @@
-"""Local command-line solver boundary for PuLP MILP models."""
+"""Local solver boundary for PuLP MILP models."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import pulp
 
 
 class SolverName(StrEnum):
-    """Supported local MILP solver executables."""
+    """Supported local MILP solvers."""
 
     HIGHS = "highs"
     CBC = "cbc"
@@ -66,8 +66,7 @@ def _solve(
 ) -> SolverResult:
     if not command.available():
         raise RuntimeError(
-            f"{solver.display_name} is not available; install the local "
-            f"{solver.value!r} executable and ensure it is on PATH"
+            f"{solver.display_name} is not available; install its local dependency"
         )
 
     started_at = perf_counter()
@@ -84,7 +83,7 @@ def _solve(
 
 @dataclass(frozen=True, slots=True)
 class HighsSolver:
-    """Solve through the local ``highs`` command-line executable."""
+    """Solve in-process through the local ``highspy`` Python package."""
 
     time_limit_seconds: float | None = None
     mip_gap: float | None = None
@@ -94,7 +93,7 @@ class HighsSolver:
         _validate_options(self.time_limit_seconds, self.mip_gap)
 
     def solve(self, model: pulp.LpProblem) -> SolverResult:
-        command = pulp.HiGHS_CMD(
+        command = pulp.HiGHS(
             msg=self.log_output,
             timeLimit=self.time_limit_seconds,
             gapRel=self.mip_gap,
