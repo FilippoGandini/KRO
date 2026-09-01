@@ -32,8 +32,11 @@ From the repository root:
 uv sync
 ```
 
-PuLP builds the MILP and CBC solves it locally. No external service or
-credentials are required.
+PuLP builds the MILP. HiGHS (the default) and CBC are supported through local
+command-line executables; the optimizer makes no remote API calls.
+See the [HiGHS installation documentation](https://github.com/ERGO-Code/HiGHS#installation)
+for binaries and source builds. CBC remains available through the executable
+bundled with PuLP.
 
 ## Preparing the inputs
 
@@ -81,11 +84,15 @@ uv run kubernetes-resource-optimizer \
   --nodes data/examples/nodes.csv \
   --workloads data/examples/workloads.csv \
   --usage data/examples/usage.csv \
+  --solver highs \
+  --time-limit-seconds 300 \
   --output-dir output/example
 ```
 
-The short alias is `uv run kro`. Risk tolerances and limit-overcommit factors
-are configurable. See all options with:
+The short alias is `uv run kro`. `--solver` accepts `highs` or `cbc` and defaults
+to `highs`. Omit `--time-limit-seconds` for an unlimited solve.
+Risk tolerances and limit-overcommit factors are also configurable. See all
+options with:
 
 ```console
 uv run kro --help
@@ -93,8 +100,9 @@ uv run kro --help
 
 ## Results
 
-The terminal output includes solver status, active-node count and cost, solve
-time, placement, and recommended requests and limits. When `--output-dir` is
+The terminal and HTML reports include the selected solver and its status,
+active-node count and cost, solve time, placement, and recommended requests and
+limits. When `--output-dir` is
 provided, the optimizer creates a portable `index.html` report with tables and
 SVG charts. Open it directly in a browser; no web server is required.
 

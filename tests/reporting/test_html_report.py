@@ -20,6 +20,7 @@ def test_generates_html_and_svg_charts(
     document = index.read_text(encoding="utf-8")
     assert "max(historical usage, recommended request)" in document
     assert "Optimization settings" in document
+    assert "<td>Solver</td><td>CBC</td>" in document
     assert "CPU request risk tolerance" in document
     assert "50.00%" in document
     assert "2×" in document

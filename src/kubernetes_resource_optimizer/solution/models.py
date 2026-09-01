@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 
 from kubernetes_resource_optimizer.data.models import Resource
-from kubernetes_resource_optimizer.optimization.solver import SolverStatus
+from kubernetes_resource_optimizer.optimization.solver import SolverName, SolverStatus
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +56,7 @@ class OptimizationResult:
     """Complete structured result, independent of terminal presentation."""
 
     solver_status: SolverStatus
+    solver: SolverName
     objective_value: float
     total_node_cost: float
     active_node_count: int

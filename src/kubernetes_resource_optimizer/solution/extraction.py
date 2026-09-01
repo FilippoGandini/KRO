@@ -181,6 +181,7 @@ def extract_solution(
 
     return OptimizationResult(
         solver_status=solver_result.status,
+        solver=solver_result.solver,
         objective_value=solver_result.objective_value,
         total_node_cost=sum(
             node.cost

@@ -10,7 +10,11 @@ from kubernetes_resource_optimizer.data.csv_loader import load_input_data
 from kubernetes_resource_optimizer.data.validation import InputValidationError
 from kubernetes_resource_optimizer.optimization.config import OptimizationConfig
 from kubernetes_resource_optimizer.optimization.model import build_model
-from kubernetes_resource_optimizer.optimization.solver import CbcSolver, SolverStatus
+from kubernetes_resource_optimizer.optimization.solver import (
+    SolverName,
+    SolverStatus,
+    create_solver,
+)
 from kubernetes_resource_optimizer.reporting import generate_html_report
 from kubernetes_resource_optimizer.solution import OptimizationResult, extract_solution
 
@@ -34,6 +38,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cpu-limit-overcommit", type=float, default=1.5)
     parser.add_argument("--memory-limit-overcommit", type=float, default=1.25)
     parser.add_argument(
+        "--solver",
+        type=SolverName,
+        choices=tuple(SolverName),
+        default=SolverName.HIGHS,
+        help="Local MILP solver executable (default: highs).",
+    )
+    parser.add_argument(
+        "--time-limit-seconds",
+        type=float,
+        default=None,
+        help="Maximum solver runtime in seconds (default: unlimited).",
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         help="Generate a static HTML/SVG report in this directory.",
@@ -44,6 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
 def _print_summary(result: OptimizationResult) -> None:
     """Print a compact presentation of the solver-independent result."""
 
+    print(f"Solver: {result.solver.display_name}")
     print(f"Solver status: {result.solver_status.value}")
     print(f"Active nodes: {result.active_node_count}/{len(result.nodes)}")
     print(f"Total node cost: {result.total_node_cost:g}")
@@ -79,7 +97,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error(str(error))
 
     model = build_model(data, config)
-    solver_result = CbcSolver().solve(model.problem)
+    try:
+        solver_result = create_solver(
+            args.solver, time_limit_seconds=args.time_limit_seconds
+        ).solve(model.problem)
+    except (RuntimeError, ValueError) as error:
+        parser.error(str(error))
     if solver_result.status not in {SolverStatus.OPTIMAL, SolverStatus.FEASIBLE}:
         print(f"Solver status: {solver_result.status.value}")
         print("No feasible recommendation is available.")

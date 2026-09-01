@@ -16,19 +16,25 @@ from kubernetes_resource_optimizer.optimization.model import (
 )
 from kubernetes_resource_optimizer.optimization.solver import (
     CbcSolver,
+    HighsSolver,
+    SolverName,
     SolverResult,
     SolverStatus,
+    create_solver,
 )
 
 __all__ = [
     "CbcSolver",
     "DerivedBounds",
+    "HighsSolver",
     "OptimizationConfig",
     "OptimizationModel",
     "Resource",
+    "SolverName",
     "SolverResult",
     "SolverStatus",
     "build_model",
+    "create_solver",
     "derive_bounds",
     "derive_limit_big_m",
     "derive_limit_upper_bound",

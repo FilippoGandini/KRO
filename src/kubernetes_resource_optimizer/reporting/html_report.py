@@ -108,6 +108,7 @@ def generate_html_report(
     period = f"{timestamps[0].isoformat()} to {timestamps[-1].isoformat()}"
     summary = _table(
         [
+            ("Solver", result.solver.display_name),
             ("Solver status", result.solver_status.value),
             ("Active nodes", f"{result.active_node_count}/{len(result.nodes)}"),
             ("Total node cost", f"{result.total_node_cost:g}"),

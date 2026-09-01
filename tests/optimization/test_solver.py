@@ -5,8 +5,11 @@ import pytest
 
 from kubernetes_resource_optimizer.optimization.solver import (
     CbcSolver,
+    HighsSolver,
+    SolverName,
     SolverStatus,
     _normalize_status,
+    create_solver,
 )
 
 
@@ -24,6 +27,7 @@ def test_cbc_solves_tiny_binary_milp() -> None:
     assert first.varValue == pytest.approx(0.0)
     assert second.varValue == pytest.approx(1.0)
     assert result.solve_time_seconds >= 0
+    assert result.solver is SolverName.CBC
     assert model.get_constraint_by_name("minimum_coverage") is not None
 
 
@@ -34,3 +38,20 @@ def test_integer_feasible_incumbent_is_not_reported_as_optimal() -> None:
     )
 
     assert status is SolverStatus.FEASIBLE
+
+
+def test_factory_defaults_to_highs_and_propagates_time_limit() -> None:
+    solver = create_solver(time_limit_seconds=12.5)
+
+    assert isinstance(solver, HighsSolver)
+    assert solver.time_limit_seconds == 12.5
+
+
+@pytest.mark.parametrize("solver_type", [HighsSolver, CbcSolver])
+@pytest.mark.parametrize("invalid_limit", [0, -1, float("inf"), float("nan")])
+def test_all_solvers_reject_invalid_time_limits(
+    solver_type: type[HighsSolver] | type[CbcSolver],
+    invalid_limit: float,
+) -> None:
+    with pytest.raises(ValueError, match="time_limit_seconds"):
+        solver_type(time_limit_seconds=invalid_limit)
