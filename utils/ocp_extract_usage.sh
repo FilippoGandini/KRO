@@ -156,7 +156,7 @@ echo
 # ---------------------------------------------------------------------------
 
 CPU_QUERY=$(cat <<EOF
-avg_over_time(
+max_over_time(
   (
     sum(
       node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{
@@ -177,7 +177,7 @@ EOF
 # ---------------------------------------------------------------------------
 
 MEM_QUERY=$(cat <<EOF
-avg_over_time(
+max_over_time(
   (
     sum(
       container_memory_working_set_bytes{
