@@ -190,6 +190,8 @@ def extract_solution(
         ),
         active_node_count=sum(node.active for node in nodes),
         solve_time_seconds=solver_result.solve_time_seconds,
+        model_variable_count=model.problem.numVariables(),
+        model_constraint_count=model.problem.numConstraints(),
         workloads=workloads,
         nodes=nodes,
         violations=tuple(violations),

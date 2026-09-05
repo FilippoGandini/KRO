@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from collections.abc import Sequence
 from pathlib import Path
+from time import perf_counter
 
 from kubernetes_resource_optimizer.data.csv_loader import load_input_data
 from kubernetes_resource_optimizer.data.validation import InputValidationError
@@ -58,6 +60,12 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _progress(message: str) -> None:
+    """Show progress immediately, keeping stdout available for results."""
+
+    print(message, file=sys.stderr, flush=True)
+
+
 def _print_summary(result: OptimizationResult) -> None:
     """Print a compact presentation of the solver-independent result."""
 
@@ -84,7 +92,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        _progress("Loading and validating CSV data...")
         data = load_input_data(args.nodes, args.workloads, args.usage)
+        _progress(
+            f"Data validated: {len(data.pods):,} workloads, "
+            f"{len(data.nodes):,} candidate nodes, "
+            f"{len({sample.timestamp for sample in data.usage_samples}):,} scenarios."
+        )
+        _progress("Validating optimization configuration...")
         config = OptimizationConfig(
             epsilon_cpu_request=args.epsilon_cpu_request,
             epsilon_memory_request=args.epsilon_memory_request,
@@ -96,21 +111,34 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (InputValidationError, ValueError) as error:
         parser.error(str(error))
 
+    _progress("Building model...")
+    build_started = perf_counter()
     model = build_model(data, config)
+    _progress(
+        f"Model built: {model.problem.numVariables():,} variables, "
+        f"{model.problem.numConstraints():,} constraints "
+        f"({perf_counter() - build_started:.3f}s)."
+    )
     try:
+        _progress(f"Running solver ({args.solver.display_name})...")
         solver_result = create_solver(
             args.solver, time_limit_seconds=args.time_limit_seconds
         ).solve(model.problem)
     except (RuntimeError, ValueError) as error:
         parser.error(str(error))
+    _progress(f"Solver finished: {solver_result.status.value}.")
     if solver_result.status not in {SolverStatus.OPTIMAL, SolverStatus.FEASIBLE}:
         print(f"Solver status: {solver_result.status.value}")
         print("No feasible recommendation is available.")
         return 1
 
+    _progress("Extracting recommendations and computing diagnostics...")
     result = extract_solution(data, model, solver_result)
+    _progress(f"Recommendations ready for {len(result.workloads):,} workloads.")
     _print_summary(result)
     if args.output_dir is not None:
+        _progress(f"Generating HTML/SVG report in {args.output_dir}...")
         report_path = generate_html_report(data, result, config, args.output_dir)
+        _progress(f"Report generated: {report_path}")
         print(f"Report: {report_path}")
     return 0

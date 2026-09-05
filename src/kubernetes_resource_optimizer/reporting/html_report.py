@@ -6,7 +6,7 @@ import hashlib
 import html
 import re
 from collections.abc import Sequence
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 from pathlib import Path
 
@@ -29,13 +29,33 @@ def _filename(identifier: str) -> str:
     return f"{slug}-{digest}.svg"
 
 
-def _table(rows: Sequence[tuple[str, ...]], headings: tuple[str, ...]) -> str:
-    header = "".join(f"<th>{html.escape(value)}</th>" for value in headings)
+def _table(
+    rows: Sequence[tuple[str, ...]],
+    headings: tuple[str, ...],
+    *,
+    column_groups: tuple[tuple[str, tuple[str, ...]], ...] = (),
+) -> str:
+    rowspan = ' rowspan="2"' if column_groups else ""
+    header = "".join(
+        f'<th scope="col"{rowspan}>{html.escape(value)}</th>' for value in headings
+    )
+    header += "".join(
+        f'<th scope="colgroup" colspan="{len(children)}">{html.escape(label)}</th>'
+        for label, children in column_groups
+    )
+    header = f"<tr>{header}</tr>"
+    if column_groups:
+        subheader = "".join(
+            f'<th scope="col">{html.escape(child)}</th>'
+            for _, children in column_groups
+            for child in children
+        )
+        header += f"<tr>{subheader}</tr>"
     body = "".join(
         "<tr>" + "".join(f"<td>{html.escape(value)}</td>" for value in row) + "</tr>"
         for row in rows
     )
-    return f"<table><thead><tr>{header}</tr></thead><tbody>{body}</tbody></table>"
+    return f"<table><thead>{header}</thead><tbody>{body}</tbody></table>"
 
 
 def _format_duration(duration: timedelta) -> str:
@@ -64,6 +84,18 @@ def _scenario_interval(data: InputData) -> str:
         f"Variable ({_format_duration(min(intervals))}–"
         f"{_format_duration(max(intervals))})"
     )
+
+
+def _historical_period(timestamps: Sequence[datetime]) -> str:
+    """Show compact start and end dates and times in a consistent timezone."""
+
+    start = timestamps[0].astimezone(UTC)
+    end = timestamps[-1].astimezone(UTC)
+    if start == end:
+        return f"{start:%d %b %Y}, {start:%H:%M} UTC"
+    if start.date() == end.date():
+        return f"{start:%d %b %Y}, {start:%H:%M}–{end:%H:%M} UTC"
+    return f"{start:%d %b %Y, %H:%M} – {end:%d %b %Y, %H:%M} (UTC)"
 
 
 def generate_html_report(
@@ -105,7 +137,7 @@ def generate_html_report(
         workload_images.append((workload_cpu_item.workload_id, f"workloads/{filename}"))
 
     timestamps = sorted({sample.timestamp for sample in data.usage_samples})
-    period = f"{timestamps[0].isoformat()} to {timestamps[-1].isoformat()}"
+    period = _historical_period(timestamps)
     summary = _table(
         [
             ("Solver", result.solver.display_name),
@@ -114,12 +146,22 @@ def generate_html_report(
             ("Total node cost", f"{result.total_node_cost:g}"),
             ("Objective value", f"{result.objective_value:g}"),
             ("Solve time", f"{result.solve_time_seconds:.3f} s"),
+            (
+                "Model size",
+                (
+                    f"{result.model_variable_count:,} variables - "
+                    f"{result.model_constraint_count:,} constraints"
+                ),
+            ),
             ("Historical period", period),
             ("Historical scenarios", str(len(timestamps))),
             ("Scenario interval (inferred)", _scenario_interval(data)),
         ],
         ("Metric", "Value"),
     )
+    violations = {
+        (item.workload_id, item.resource): item for item in result.violations
+    }
     workload_rows = [
         (
             workload.workload_id,
@@ -128,6 +170,14 @@ def generate_html_report(
             f"{workload.recommended_cpu_limit:g}",
             f"{workload.recommended_memory_request:g}",
             f"{workload.recommended_memory_limit:g}",
+            *(
+                f"{violations[workload.workload_id, resource].request_violation_count:,}"
+                for resource in (Resource.CPU, Resource.MEMORY)
+            ),
+            *(
+                f"{violations[workload.workload_id, resource].limit_violation_count:,}"
+                for resource in (Resource.CPU, Resource.MEMORY)
+            ),
         )
         for workload in result.workloads
     ]
@@ -140,6 +190,10 @@ def generate_html_report(
             "CPU limit",
             "Memory request (MiB)",
             "Memory limit (MiB)",
+        ),
+        column_groups=(
+            ("Request violations", ("CPU", "Memory")),
+            ("Limit violations", ("CPU", "Memory")),
         ),
     )
     settings_table = _table(
@@ -205,7 +259,7 @@ def generate_html_report(
 <style>
 body{{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;max-width:1500px;margin:auto;padding:2rem;color:#263238;background:#fafafa}}
 h1,h2,h3{{color:#102A43}} section{{background:white;padding:1rem 1.25rem;margin:1rem 0;border:1px solid #dfe3e6;border-radius:8px}}
-table{{border-collapse:collapse;width:100%;background:white;margin:1rem 0}} th,td{{border:1px solid #dfe3e6;padding:.55rem;text-align:left}} th{{background:#eef3f7}}
+table{{border-collapse:collapse;width:100%;background:white;margin:1rem 0}} th,td{{border:1px solid #dfe3e6;padding:.55rem;text-align:center}} th{{background:#eef3f7}}
 img{{display:block;max-width:100%;height:auto;margin:auto}} .note{{padding:.8rem 1rem;background:#fff8e1;border-left:4px solid #f9a825}}
 </style></head><body>
 <h1>Kubernetes Resource Optimizer report</h1>

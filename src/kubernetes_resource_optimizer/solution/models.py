@@ -61,6 +61,8 @@ class OptimizationResult:
     total_node_cost: float
     active_node_count: int
     solve_time_seconds: float
+    model_variable_count: int
+    model_constraint_count: int
     workloads: tuple[WorkloadResult, ...]
     nodes: tuple[NodeResult, ...]
     violations: tuple[ViolationDiagnostics, ...]

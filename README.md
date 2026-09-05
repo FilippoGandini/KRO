@@ -99,6 +99,10 @@ uv run kro --help
 
 ## Results
 
+The CLI shows progress on stderr while loading and validating CSV data, building
+the model, running the solver, extracting recommendations, and generating reports.
+It includes input counts, model size, and model build time. Results remain on stdout.
+
 The terminal and HTML reports include the selected solver and its status,
 active-node count and cost, solve time, placement, and recommended requests and
 limits. When `--output-dir` is
