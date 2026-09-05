@@ -35,9 +35,7 @@ uv sync
 PuLP builds the MILP. HiGHS is the default and runs locally in-process through
 the `highspy` dependency; CBC remains available through the executable bundled
 with PuLP. The optimizer makes no remote API calls. `uv sync` installs HiGHS
-automatically from the locked project dependencies. See the
-[HiGHS installation documentation](https://github.com/ERGO-Code/HiGHS#installation)
-for alternative installation methods.
+automatically from the locked project dependencies. 
 
 ## Preparing the inputs
 
@@ -108,9 +106,7 @@ provided, the optimizer creates a portable `index.html` report with tables and
 SVG charts. Open it directly in a browser; no web server is required.
 
 
-
-The command writes `data/private/usage.csv` by default. Use `--help` for the
-supported units and metric-label options.
+Use `--help` for the supported units and metric-label options.
 
 ## Development checks
 

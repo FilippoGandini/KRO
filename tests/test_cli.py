@@ -27,10 +27,10 @@ def test_cli_optimizes_example_csv_files(
     output = capsys.readouterr().out
     assert "Solver: HiGHS" in output
     assert "Solver status: optimal" in output
-    assert "Active nodes: 4/5" in output
-    assert "Total node cost: 4" in output
-    assert "api-replica-0 ->" in output
-    assert "api-replica-1 ->" in output
+    assert "Active nodes: 3/6" in output
+    assert "Total node cost: 3" in output
+    assert "backend-0 ->" in output
+    assert "backend-1 ->" in output
 
 
 def test_cli_defaults_to_highs_with_an_unlimited_runtime() -> None:

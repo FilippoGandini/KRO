@@ -16,6 +16,11 @@ __pycache__/
 *.crt
 
 data/private/
+data/examples/README.md
+data/examples/generate_usage.py
+
+
+
 results/
 output/
 docs/*
