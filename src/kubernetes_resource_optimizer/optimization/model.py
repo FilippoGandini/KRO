@@ -6,6 +6,7 @@ import pulp
 
 from kubernetes_resource_optimizer.data.models import InputData
 from kubernetes_resource_optimizer.optimization.bounds import (
+    BoundKey,
     DerivedBounds,
     derive_bounds,
 )
@@ -24,8 +25,16 @@ from kubernetes_resource_optimizer.optimization.constraints import (
     add_request_limit_ordering_constraints,
     add_runtime_capacity_constraints,
 )
-from kubernetes_resource_optimizer.optimization.objective import (
-    set_lexicographic_rightsizing_objective,
+from kubernetes_resource_optimizer.optimization.constraints.requests import (
+    add_request_coverage_floor_constraints,
+)
+from kubernetes_resource_optimizer.optimization.objectives.priority import (
+    LimitPriority,
+    derive_limit_priorities,
+)
+from kubernetes_resource_optimizer.optimization.objectives.stages import (
+    ObjectiveStage,
+    build_objective_stages,
 )
 from kubernetes_resource_optimizer.optimization.variables import (
     ModelVariables,
@@ -39,6 +48,9 @@ class OptimizationModel:
 
     problem: pulp.LpProblem
     variables: ModelVariables
+    stages: tuple[ObjectiveStage, ...]
+    priorities: dict[BoundKey, LimitPriority]
+    config: OptimizationConfig
 
 
 def build_model(
@@ -53,7 +65,7 @@ def build_model(
 
     resolved_bounds = bounds if bounds is not None else derive_bounds(data)
     problem = pulp.LpProblem("kubernetes_resource_optimizer", pulp.LpMinimize)
-    variables = create_variables(problem, data, resolved_bounds)
+    variables = create_variables(problem, data, resolved_bounds, fairness=config.fairness)
 
     add_assignment_constraints(problem, data, variables)
     add_node_activation_constraints(problem, data, variables)
@@ -66,11 +78,13 @@ def build_model(
     add_runtime_capacity_constraints(problem, data, variables)
     add_limit_linearization_constraints(problem, data, resolved_bounds, variables)
     add_limit_overcommit_constraints(problem, data, config, variables)
-    add_limit_headroom_fairness_constraints(
-        problem, data, resolved_bounds, variables
+    if config.fairness:
+        add_limit_headroom_fairness_constraints(problem, data, resolved_bounds, variables)
+    priorities = derive_limit_priorities(data, config)
+    add_request_coverage_floor_constraints(
+        problem, variables, {key: value.request_reference for key, value in priorities.items()}
     )
-    set_lexicographic_rightsizing_objective(
-        problem, data, variables, resolved_bounds
-    )
+    stages = build_objective_stages(data, variables, resolved_bounds, config, priorities)
+    problem.setObjective(stages[0].expression)
 
-    return OptimizationModel(problem=problem, variables=variables)
+    return OptimizationModel(problem, variables, stages, priorities, config)

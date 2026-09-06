@@ -13,6 +13,9 @@ from kubernetes_resource_optimizer.data.models import (
 )
 from kubernetes_resource_optimizer.optimization.config import OptimizationConfig
 from kubernetes_resource_optimizer.optimization.model import build_model
+from kubernetes_resource_optimizer.optimization.objectives.lexicographic import (
+    solve_lexicographic,
+)
 from kubernetes_resource_optimizer.optimization.solver import (
     CbcSolver,
     SolverResult,
@@ -76,7 +79,7 @@ def solve_known_configuration() -> tuple[InputData, object, SolverResult]:
         built.problem.addConstraint(
             variable == value, f"fix_{family}_{pod_id}_{resource.value}"
         )
-    result = CbcSolver().solve(built.problem)
+    result = solve_lexicographic(built, CbcSolver())
     assert result.status is SolverStatus.OPTIMAL
     return data, built, result
 
@@ -87,7 +90,9 @@ def test_extracts_workloads_nodes_and_summary() -> None:
     result = extract_solution(data, built, solver_result)
 
     assert result.solver_status is SolverStatus.OPTIMAL
-    assert result.objective_value == pytest.approx(5.7483333333)
+    assert result.objective_value == pytest.approx(103 / 96)
+    assert result.lexicographic_complete
+    assert result.stages == solver_result.stages
     assert result.active_node_count == 1
     assert result.total_node_cost == pytest.approx(1.0)
     assert result.solve_time_seconds == solver_result.solve_time_seconds

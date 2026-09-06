@@ -84,6 +84,8 @@ def add_limit_headroom_fairness_constraints(
     for pod in data.pods:
         for resource in Resource:
             limit_upper = bounds.limit_upper[pod.pod_id, resource]
+            if limit_upper == 0:
+                continue  # Fixed-zero resource pairs have no normalized headroom.
             model += (
                 variables.minimum_limit_headroom[resource]
                 <= (
@@ -93,3 +95,7 @@ def add_limit_headroom_fairness_constraints(
                 / limit_upper,
                 f"minimum_limit_headroom_bound[{pod.pod_id},{resource.value}]",
             )
+
+    for resource, headroom in variables.minimum_limit_headroom.items():
+        if not any(bounds.limit_upper[pod.pod_id, resource] > 0 for pod in data.pods):
+            model += headroom == 0, f"empty_headroom[{resource.value}]"

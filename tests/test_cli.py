@@ -40,3 +40,15 @@ def test_cli_defaults_to_highs_with_an_unlimited_runtime() -> None:
 
     assert args.solver.value == "highs"
     assert args.time_limit_seconds is None
+
+
+def test_priority_and_fairness_options() -> None:
+    base = ["--nodes", "n.csv", "--workloads", "w.csv", "--usage", "u.csv"]
+    defaults = build_parser().parse_args(base)
+    assert defaults.limit_priority == 0
+    assert not defaults.fairness
+    selected = build_parser().parse_args([*base, "--limit-priority", "-2", "--fairness"])
+    assert selected.limit_priority == -2
+    assert selected.fairness
+    with pytest.raises(SystemExit):
+        build_parser().parse_args([*base, "--limit-priority", "3"])

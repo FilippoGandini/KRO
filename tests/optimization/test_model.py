@@ -14,6 +14,9 @@ from kubernetes_resource_optimizer.data.models import (
 )
 from kubernetes_resource_optimizer.optimization.config import OptimizationConfig
 from kubernetes_resource_optimizer.optimization.model import build_model
+from kubernetes_resource_optimizer.optimization.objectives.lexicographic import (
+    solve_lexicographic,
+)
 from kubernetes_resource_optimizer.optimization.solver import CbcSolver, SolverStatus
 
 TIMESTAMP = datetime(2026, 8, 1, tzinfo=UTC)
@@ -43,10 +46,10 @@ def make_data(*, pod_count: int, node_count: int) -> InputData:
 def test_one_workload_one_node_uses_the_only_node() -> None:
     built = build_model(make_data(pod_count=1, node_count=1), ZERO_RISK)
 
-    result = CbcSolver().solve(built.problem)
+    result = solve_lexicographic(built, CbcSolver())
 
     assert result.status is SolverStatus.OPTIMAL
-    assert result.objective_value == pytest.approx(3.2777777778)
+    assert result.objective_value == pytest.approx(1.0)
     assert built.variables.placement["pod-0", "node-0"].varValue == pytest.approx(1.0)
     assert built.variables.node_active["node-0"].varValue == pytest.approx(1.0)
 
@@ -54,16 +57,16 @@ def test_one_workload_one_node_uses_the_only_node() -> None:
 def test_two_workloads_two_nodes_minimizes_to_one_active_node() -> None:
     built = build_model(make_data(pod_count=2, node_count=2), ZERO_RISK)
 
-    result = CbcSolver().solve(built.problem)
+    result = solve_lexicographic(built, CbcSolver())
 
     assert result.status is SolverStatus.OPTIMAL
-    assert result.objective_value == pytest.approx(6.2333333333)
+    assert result.objective_value == pytest.approx(2.0)
     assert sum(variable.varValue for variable in built.variables.node_active.values()) == pytest.approx(1.0)
 
 
 def test_every_workload_is_assigned_exactly_once() -> None:
     built = build_model(make_data(pod_count=2, node_count=2), ZERO_RISK)
-    CbcSolver().solve(built.problem)
+    solve_lexicographic(built, CbcSolver())
 
     for pod_id in ("pod-0", "pod-1"):
         assert sum(
@@ -81,7 +84,7 @@ def test_inactive_node_cannot_host_a_workload() -> None:
         built.variables.placement["pod-0", "node-0"] == 1, "force_placement"
     )
 
-    result = CbcSolver().solve(built.problem)
+    result = solve_lexicographic(built, CbcSolver())
 
     assert result.status is SolverStatus.INFEASIBLE
 
@@ -96,7 +99,7 @@ def test_request_cannot_exceed_limit(resource: Resource) -> None:
         built.variables.limit["pod-0", resource] == 1.0, "force_limit"
     )
 
-    result = CbcSolver().solve(built.problem)
+    result = solve_lexicographic(built, CbcSolver())
 
     assert result.status is SolverStatus.INFEASIBLE
 
@@ -115,7 +118,7 @@ def test_request_and_limit_variables_use_derived_upper_bounds() -> None:
 def test_model_contains_all_expected_variable_families() -> None:
     built = build_model(make_data(pod_count=2, node_count=2), ZERO_RISK)
 
-    assert len(built.problem.variables()) == 40
+    assert len(built.problem.variables()) == 38
     assert all(
         variable.name.startswith(
             (
@@ -133,10 +136,9 @@ def test_model_contains_all_expected_variable_families() -> None:
         for variable in built.problem.variables()
     )
     assert built.problem.sense == pulp.LpMinimize
-    assert (
-        built.problem.objective.name
-        == "lexicographic_node_cost_requests_fairness_and_limits"
-    )
+    assert [stage.name for stage in built.stages] == [
+        "node_cost", "normalized_requests", "weighted_limits"
+    ]
 
 
 def test_limit_headroom_is_distributed_fairly_after_requests_are_minimized() -> None:
@@ -157,10 +159,10 @@ def test_limit_headroom_is_distributed_fairly_after_requests_are_minimized() -> 
             UsageSample(TIMESTAMP, pod.pod_id, 1, 100) for pod in pods
         ),
     )
-    config = OptimizationConfig(0, 0, 0, 0, 1, 1)
+    config = OptimizationConfig(0, 0, 0, 0, 1, 1, fairness=True)
     built = build_model(data, config)
 
-    result = CbcSolver().solve(built.problem)
+    result = solve_lexicographic(built, CbcSolver())
 
     assert result.status is SolverStatus.OPTIMAL
     for pod in pods:
@@ -181,7 +183,7 @@ def test_node_cost_is_primary_and_requests_only_break_cost_ties() -> None:
     )
     built = build_model(data, ZERO_RISK)
 
-    result = CbcSolver().solve(built.problem)
+    result = solve_lexicographic(built, CbcSolver())
 
     assert result.status is SolverStatus.OPTIMAL
     assert built.variables.placement["pod-0", "cheap"].varValue == pytest.approx(1)
@@ -200,7 +202,7 @@ def test_optimizer_can_choose_more_nodes_when_their_total_cost_is_lower() -> Non
     )
     built = build_model(data, ZERO_RISK)
 
-    result = CbcSolver().solve(built.problem)
+    result = solve_lexicographic(built, CbcSolver())
 
     assert result.status is SolverStatus.OPTIMAL
     assert built.variables.node_active["large"].varValue == pytest.approx(0)

@@ -7,6 +7,9 @@ import pytest
 from kubernetes_resource_optimizer.data.models import InputData, Node, Pod, UsageSample
 from kubernetes_resource_optimizer.optimization.config import OptimizationConfig
 from kubernetes_resource_optimizer.optimization.model import build_model
+from kubernetes_resource_optimizer.optimization.objectives.lexicographic import (
+    solve_lexicographic,
+)
 from kubernetes_resource_optimizer.optimization.solver import CbcSolver, SolverStatus
 
 TIMESTAMP = datetime(2026, 8, 1, tzinfo=UTC)
@@ -46,7 +49,7 @@ def test_equivalent_nodes_are_activated_in_csv_order() -> None:
         is not None
     )
 
-    result = CbcSolver().solve(built.problem)
+    result = solve_lexicographic(built, CbcSolver())
 
     assert result.status is SolverStatus.OPTIMAL
     assert built.variables.node_active["node-a"].varValue == pytest.approx(1)
@@ -90,6 +93,6 @@ def test_later_equivalent_node_cannot_be_active_before_earlier_node() -> None:
         built.variables.node_active["second"] == 1, "force_second_active"
     )
 
-    result = CbcSolver().solve(built.problem)
+    result = solve_lexicographic(built, CbcSolver())
 
     assert result.status is SolverStatus.INFEASIBLE

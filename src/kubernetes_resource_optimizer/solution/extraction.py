@@ -196,4 +196,7 @@ def extract_solution(
         nodes=nodes,
         violations=tuple(violations),
         node_diagnostics=tuple(node_diagnostics),
+        stages=solver_result.stages,
+        lexicographic_complete=solver_result.lexicographic_complete,
+        optimization_message=solver_result.message,
     )

@@ -90,3 +90,23 @@ def add_limit_chance_constraints(
                 <= config.maximum_limit_violations(resource, len(samples)),
                 f"limit_violation_budget[{pod.pod_id},{resource.value}]",
             )
+
+
+def add_request_coverage_floor_constraints(
+    model: pulp.LpProblem,
+    variables: ModelVariables,
+    references: dict[tuple[str, Resource], float],
+) -> None:
+    """Strengthen the relaxation with an implied empirical-coverage lower bound.
+
+    At most k samples may exceed a request, hence r >= u_(n-k); replica
+    equality implies the maximum such reference within a service. The original
+    binary chance constraints remain unchanged. These redundant inequalities
+    help certify the request objective without changing integer feasibility.
+    """
+
+    for (pod_id, resource), reference in references.items():
+        model += (
+            variables.request[pod_id, resource] >= reference,
+            f"request_coverage_floor[{pod_id},{resource.value}]",
+        )

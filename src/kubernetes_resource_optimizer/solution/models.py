@@ -3,7 +3,11 @@
 from dataclasses import dataclass
 
 from kubernetes_resource_optimizer.data.models import Resource
-from kubernetes_resource_optimizer.optimization.solver import SolverName, SolverStatus
+from kubernetes_resource_optimizer.optimization.solver import (
+    SolverName,
+    SolverStatus,
+    StageResult,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,3 +71,6 @@ class OptimizationResult:
     nodes: tuple[NodeResult, ...]
     violations: tuple[ViolationDiagnostics, ...]
     node_diagnostics: tuple[NodeDiagnostics, ...]
+    stages: tuple[StageResult, ...] = ()
+    lexicographic_complete: bool = False
+    optimization_message: str = ""

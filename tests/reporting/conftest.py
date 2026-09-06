@@ -16,6 +16,9 @@ from kubernetes_resource_optimizer.optimization.model import (
     OptimizationModel,
     build_model,
 )
+from kubernetes_resource_optimizer.optimization.objectives.lexicographic import (
+    solve_lexicographic,
+)
 from kubernetes_resource_optimizer.optimization.solver import (
     CbcSolver,
     SolverResult,
@@ -76,6 +79,6 @@ def solved_report_problem() -> SolvedProblem:
         built.problem.addConstraint(
             variable == value, f"fix_report_{family}_{pod_id}_{resource.value}"
         )
-    solver_result = CbcSolver().solve(built.problem)
+    solver_result = solve_lexicographic(built, CbcSolver())
     assert solver_result.status is SolverStatus.OPTIMAL
     return data, built, solver_result

@@ -13,6 +13,9 @@ from kubernetes_resource_optimizer.data.models import (
 )
 from kubernetes_resource_optimizer.optimization.config import OptimizationConfig
 from kubernetes_resource_optimizer.optimization.model import build_model
+from kubernetes_resource_optimizer.optimization.objectives.lexicographic import (
+    solve_lexicographic,
+)
 from kubernetes_resource_optimizer.optimization.solver import CbcSolver, SolverStatus
 
 TIMESTAMP = datetime(2026, 8, 1, tzinfo=UTC)
@@ -33,7 +36,7 @@ def test_replicas_receive_identical_requests_and_limits() -> None:
     )
     built = build_model(data, ZERO_RISK)
 
-    result = CbcSolver().solve(built.problem)
+    result = solve_lexicographic(built, CbcSolver())
 
     assert result.status is SolverStatus.OPTIMAL
     for resource in Resource:
@@ -58,7 +61,7 @@ def test_pods_without_service_id_are_not_tied_together() -> None:
     )
     built = build_model(data, ZERO_RISK)
 
-    result = CbcSolver().solve(built.problem)
+    result = solve_lexicographic(built, CbcSolver())
 
     assert result.status is SolverStatus.OPTIMAL
     assert built.variables.request["pod-0", Resource.CPU].varValue == pytest.approx(1)

@@ -1,7 +1,7 @@
 [project]
 name = "kubernetes-resource-optimizer"
 version = "0.1.0"
-description = "Offline MILP optimizer for Kubernetes workload rightsizing and placement"
+description = "Offline MILP optimizer for for Kubernetes workload rightsizing and placement"
 readme = "README.md"
 license = "Apache-2.0"
 authors = [
@@ -31,3 +31,8 @@ dev = [
     "pytest>=9.1.1",
     "ruff>=0.16.4",
 ]
+
+# PuLP does not ship typing metadata; keep checking the project's own types.
+[[tool.mypy.overrides]]
+module = ["pulp", "pulp.*"]
+ignore_missing_imports = true

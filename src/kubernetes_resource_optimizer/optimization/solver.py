@@ -37,6 +37,16 @@ class SolverStatus(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class StageResult:
+    """Objective optimum/incumbent and termination state of one phase."""
+
+    name: str
+    status: SolverStatus
+    objective_value: float | None
+    solve_time_seconds: float
+
+
+@dataclass(frozen=True, slots=True)
 class SolverResult:
     """Summary returned after solving a model."""
 
@@ -44,6 +54,9 @@ class SolverResult:
     objective_value: float | None
     solve_time_seconds: float
     solver: SolverName = SolverName.CBC
+    stages: tuple[StageResult, ...] = ()
+    lexicographic_complete: bool = False
+    message: str = ""
 
 
 class MilpSolver(Protocol):
@@ -74,7 +87,7 @@ def _solve(
     solve_time_seconds = perf_counter() - started_at
     status = _normalize_status(raw_status, model.sol_status)
     objective_value = (
-        float(pulp.value(model.objective))
+        float(pulp.value(model.objective) or 0.0)
         if status in {SolverStatus.OPTIMAL, SolverStatus.FEASIBLE}
         else None
     )
@@ -97,6 +110,7 @@ class HighsSolver:
             msg=self.log_output,
             timeLimit=self.time_limit_seconds,
             gapRel=self.mip_gap,
+            gapAbs=0.0,
         )
         return _solve(model, command, SolverName.HIGHS)
 
@@ -123,6 +137,7 @@ class CbcSolver:
             msg=self.log_output,
             timeLimit=self.time_limit_seconds,
             gapRel=self.mip_gap,
+            gapAbs=0.0,
             path=pulp.PULP_CBC_CMD.pulp_cbc_path,
         )
         return _solve(model, solver, SolverName.CBC)
@@ -134,7 +149,7 @@ def create_solver(
     time_limit_seconds: float | None = None,
     mip_gap: float | None = None,
     log_output: bool = False,
-) -> MilpSolver:
+) -> HighsSolver | CbcSolver:
     """Create the selected local solver; HiGHS is the application default."""
 
     if solver is SolverName.HIGHS:

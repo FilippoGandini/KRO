@@ -144,7 +144,10 @@ def generate_html_report(
             ("Solver status", result.solver_status.value),
             ("Active nodes", f"{result.active_node_count}/{len(result.nodes)}"),
             ("Total node cost", f"{result.total_node_cost:g}"),
-            ("Objective value", f"{result.objective_value:g}"),
+            ("Last solved objective value", f"{result.objective_value:g}"),
+            ("Lexicographic optimization complete", str(result.lexicographic_complete)),
+            ("Optimization message", result.optimization_message),
+            *((f"Phase: {stage.name}", f"{stage.status.value}; value={stage.objective_value}; {stage.solve_time_seconds:.3f} s") for stage in result.stages),
             ("Solve time", f"{result.solve_time_seconds:.3f} s"),
             (
                 "Model size",
@@ -199,14 +202,22 @@ def generate_html_report(
     settings_table = _table(
         [
             (
+                "Limit priority", str(config.limit_priority),
+                "-2 favors steady demand near request; 0 balances indicators; +2 favors peaks.",
+            ),
+            (
+                "Fairness", "Enabled" if config.fairness else "Disabled",
+                "Preserve optimal minimum-headroom score before optimizing demand-weighted limits.",
+            ),
+            (
                 "CPU request risk tolerance",
                 f"{config.epsilon_cpu_request:.2%}",
-                "Maximum share of historical scenarios in which CPU usage may exceed the recommended request.",
+                "Maximum historical CPU exceedance share. Choose conservatively: requests are minimized jointly with placement.",
             ),
             (
                 "Memory request risk tolerance",
                 f"{config.epsilon_memory_request:.2%}",
-                "Maximum share of historical scenarios in which memory usage may exceed the recommended request.",
+                "Maximum historical memory exceedance share. Choose conservatively: requests are minimized jointly with placement.",
             ),
             (
                 "CPU limit risk tolerance",

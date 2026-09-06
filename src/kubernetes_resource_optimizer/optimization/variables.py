@@ -30,7 +30,7 @@ class ModelVariables:
 
 
 def create_variables(
-    model: pulp.LpProblem, data: InputData, bounds: DerivedBounds
+    model: pulp.LpProblem, data: InputData, bounds: DerivedBounds, *, fairness: bool = False
 ) -> ModelVariables:
     """Create placement, resource, and chance-constraint variables."""
 
@@ -105,6 +105,7 @@ def create_variables(
             f"minimum_limit_headroom[{resource.value}]", lowBound=0, upBound=1
         )
         for resource in Resource
+        if fairness
     }
     return ModelVariables(
         placement,

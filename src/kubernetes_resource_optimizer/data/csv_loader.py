@@ -3,6 +3,7 @@
 import csv
 from collections.abc import Callable
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 
 from kubernetes_resource_optimizer.data.models import (
@@ -131,7 +132,7 @@ def load_pods_csv(path: Path) -> tuple[Pod, ...]:
                 row,
                 field,
                 source,
-                lambda value, field=field: parse_cpu_cores(value, field=field),
+                partial(parse_cpu_cores, field=field),
             )
             for field in cpu_fields
         }
@@ -141,7 +142,7 @@ def load_pods_csv(path: Path) -> tuple[Pod, ...]:
                     row,
                     field,
                     source,
-                    lambda value, field=field: parse_memory_mib(value, field=field),
+                    partial(parse_memory_mib, field=field),
                 )
                 for field in memory_fields
             }

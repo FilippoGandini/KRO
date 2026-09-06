@@ -11,7 +11,11 @@ from kubernetes_resource_optimizer.optimization.bounds import maximum_violation_
 class OptimizationConfig:
     """Resource-specific chance tolerances and limit overcommit factors.
 
-    Epsilon values are probabilities in ``[0, 1]``. Limit overcommit factors
+    Epsilon values are empirical exceedance shares in ``[0, 1]``.
+    Choose request tolerances conservatively: the second phase minimizes
+    requests to their allowed coverage floor. ``limit_priority`` mixes steady
+    and peak indicators from -2 to +2; ``fairness`` inserts an optional phase
+    preserving the optimal sum of per-resource minimum normalized headroom. Limit overcommit factors
     are finite and non-negative; a zero factor is permitted because it is a
     meaningful (although often infeasible) model configuration.
     """
@@ -23,7 +27,17 @@ class OptimizationConfig:
     cpu_limit_overcommit: float
     memory_limit_overcommit: float
 
+    limit_priority: int = 0
+    fairness: bool = False
+    lexicographic_tolerance: float = 1e-9
+
     def __post_init__(self) -> None:
+        if type(self.limit_priority) is not int or self.limit_priority not in range(-2, 3):
+            raise ValueError("limit_priority must be an integer from -2 to 2")
+        if type(self.fairness) is not bool:
+            raise ValueError("fairness must be a boolean")
+        if not math.isfinite(self.lexicographic_tolerance) or self.lexicographic_tolerance < 0:
+            raise ValueError("lexicographic_tolerance must be finite and non-negative")
         epsilon_fields = (
             "epsilon_cpu_request",
             "epsilon_memory_request",
