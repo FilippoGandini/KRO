@@ -36,20 +36,37 @@ def build_parser() -> argparse.ArgumentParser:
         "--workloads", type=Path, required=True, help="Path to workloads.csv"
     )
     parser.add_argument("--usage", type=Path, required=True, help="Path to usage.csv")
-    parser.add_argument("--epsilon-cpu-request", type=float, default=0.05,
-                        help="Allowed historical CPU request exceedance share; choose conservatively because requests are minimized.")
-    parser.add_argument("--epsilon-memory-request", type=float, default=0.05,
-                        help="Allowed historical memory request exceedance share; choose conservatively because requests are minimized.")
+    parser.add_argument(
+        "--epsilon-cpu-request",
+        type=float,
+        default=0.05,
+        help="Allowed historical CPU request exceedance share; choose conservatively because requests are calculated at the coverage floor.",
+    )
+    parser.add_argument(
+        "--epsilon-memory-request",
+        type=float,
+        default=0.05,
+        help="Allowed historical memory request exceedance share; choose conservatively because requests are calculated at the coverage floor.",
+    )
     parser.add_argument("--epsilon-cpu-limit", type=float, default=0.01)
     parser.add_argument("--epsilon-memory-limit", type=float, default=0.01)
     parser.add_argument("--cpu-limit-overcommit", type=float, default=1.5)
     parser.add_argument("--memory-limit-overcommit", type=float, default=1.25)
     parser.add_argument(
-        "--limit-priority", type=int, choices=range(-2, 3), default=0,
-        help="Limit preference: -2 steady near request, 0 balanced, +2 strong peaks (default: 0).",
+        "--limit-peak-multiplier",
+        type=float,
+        default=1.5,
+        help="Hard limit cap as a multiple of each pod's historical peak (default: 1.5).",
     )
     parser.add_argument(
-        "--fairness", action="store_true",
+        "--fairness-mip-gap",
+        type=float,
+        default=0.0,
+        help="Relative MIP gap accepted only for fairness (default: 0).",
+    )
+    parser.add_argument(
+        "--fairness",
+        action="store_true",
         help="Optimize minimum normalized request-limit headroom before maximizing weighted limits (default: disabled).",
     )
     parser.add_argument(
@@ -89,7 +106,9 @@ def _print_summary(result: OptimizationResult) -> None:
     print(f"Last solved objective value: {result.objective_value:g}")
     print(f"Lexicographic optimization complete: {result.lexicographic_complete}")
     for stage in result.stages:
-        print(f"  {stage.name}: {stage.status.value}, value={stage.objective_value}")
+        print(
+            f"  {stage.name}: {stage.status.value}, value={stage.objective_value}; gap={stage.mip_gap}; bound={stage.best_bound}"
+        )
     if result.optimization_message:
         print(result.optimization_message)
     print(f"Solve time: {result.solve_time_seconds:.3f}s")
@@ -125,7 +144,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             epsilon_memory_limit=args.epsilon_memory_limit,
             cpu_limit_overcommit=args.cpu_limit_overcommit,
             memory_limit_overcommit=args.memory_limit_overcommit,
-            limit_priority=args.limit_priority,
+            limit_peak_multiplier=args.limit_peak_multiplier,
+            fairness_mip_gap=args.fairness_mip_gap,
             fairness=args.fairness,
         )
     except (InputValidationError, ValueError) as error:
@@ -133,7 +153,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     _progress("Building model...")
     build_started = perf_counter()
-    model = build_model(data, config)
+    try:
+        model = build_model(data, config)
+    except ValueError as error:
+        parser.error(str(error))
     _progress(
         f"Model built: {model.problem.numVariables():,} variables, "
         f"{model.problem.numConstraints():,} constraints "
@@ -142,7 +165,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         _progress(f"Running solver ({args.solver.display_name})...")
         solver_result = solve_lexicographic(
-            model, create_solver(args.solver, time_limit_seconds=args.time_limit_seconds),
+            model,
+            create_solver(args.solver, time_limit_seconds=args.time_limit_seconds),
             progress=_progress,
         )
     except (RuntimeError, ValueError) as error:

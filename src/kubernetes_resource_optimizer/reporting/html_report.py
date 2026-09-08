@@ -147,7 +147,13 @@ def generate_html_report(
             ("Last solved objective value", f"{result.objective_value:g}"),
             ("Lexicographic optimization complete", str(result.lexicographic_complete)),
             ("Optimization message", result.optimization_message),
-            *((f"Phase: {stage.name}", f"{stage.status.value}; value={stage.objective_value}; {stage.solve_time_seconds:.3f} s") for stage in result.stages),
+            *(
+                (
+                    f"Phase: {stage.name}",
+                    f"{stage.status.value}; value={stage.objective_value}; gap={stage.mip_gap}; bound={stage.best_bound}; {stage.solve_time_seconds:.3f} s",
+                )
+                for stage in result.stages
+            ),
             ("Solve time", f"{result.solve_time_seconds:.3f} s"),
             (
                 "Model size",
@@ -162,9 +168,7 @@ def generate_html_report(
         ],
         ("Metric", "Value"),
     )
-    violations = {
-        (item.workload_id, item.resource): item for item in result.violations
-    }
+    violations = {(item.workload_id, item.resource): item for item in result.violations}
     workload_rows = [
         (
             workload.workload_id,
@@ -202,22 +206,29 @@ def generate_html_report(
     settings_table = _table(
         [
             (
-                "Limit priority", str(config.limit_priority),
-                "-2 favors steady demand near request; 0 balances indicators; +2 favors peaks.",
+                "Limit peak multiplier",
+                str(config.limit_peak_multiplier),
+                "Hard limit cap relative to each pod historical maximum.",
             ),
             (
-                "Fairness", "Enabled" if config.fairness else "Disabled",
-                "Preserve optimal minimum-headroom score before optimizing demand-weighted limits.",
+                "Fairness MIP gap",
+                f"{config.fairness_mip_gap:.2%}",
+                "Relative optimality gap accepted only in the optional fairness phase.",
+            ),
+            (
+                "Fairness",
+                "Enabled" if config.fairness else "Disabled",
+                "Preserve achieved minimum-headroom score before optimizing demand-weighted limits.",
             ),
             (
                 "CPU request risk tolerance",
                 f"{config.epsilon_cpu_request:.2%}",
-                "Maximum historical CPU exceedance share. Choose conservatively: requests are minimized jointly with placement.",
+                "Maximum historical CPU exceedance share. Choose conservatively: requests are calculated deterministically from coverage.",
             ),
             (
                 "Memory request risk tolerance",
                 f"{config.epsilon_memory_request:.2%}",
-                "Maximum historical memory exceedance share. Choose conservatively: requests are minimized jointly with placement.",
+                "Maximum historical memory exceedance share. Choose conservatively: requests are calculated deterministically from coverage.",
             ),
             (
                 "CPU limit risk tolerance",

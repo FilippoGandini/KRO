@@ -43,47 +43,42 @@ def data() -> InputData:
 
 
 @pytest.mark.parametrize("solver_type", [CbcSolver, HighsSolver])
-@pytest.mark.parametrize("priority, expected", [(-2, (9, 1)), (2, (2, 8))])
 def test_priority_changes_limits_without_sacrificing_cost_or_requests(
-    solver_type, priority, expected
+    solver_type,
 ) -> None:
-    model = build_model(data(), replace(CONFIG, limit_priority=priority))
+    model = build_model(data(), CONFIG)
     result = solve_lexicographic(model, solver_type())
     assert result.status is SolverStatus.OPTIMAL
     assert result.lexicographic_complete
     assert [s.name for s in result.stages] == [
         "node_cost",
-        "normalized_requests",
         "weighted_limits",
     ]
     assert result.stages[0].objective_value == pytest.approx(1)
-    assert result.stages[1].objective_value == pytest.approx(0.5)
     assert model.variables.minimum_limit_headroom == {}
     assert [
         model.variables.limit[pod, Resource.CPU].varValue for pod in ("steady", "spiky")
-    ] == pytest.approx(expected)
+    ] == pytest.approx((2, 8))
     assert [
-        model.variables.request[pod, Resource.CPU].varValue
-        for pod in ("steady", "spiky")
+        model.requests[pod, Resource.CPU] for pod in ("steady", "spiky")
     ] == pytest.approx([2, 1])
     # Temporary locks do not contaminate repeat solves.
     again = solve_lexicographic(model, solver_type())
     assert again.objective_value == pytest.approx(result.objective_value)
 
 
-@pytest.mark.parametrize("priority", [-2, 2])
-def test_fairness_precedes_weights(priority: int) -> None:
-    model = build_model(data(), replace(CONFIG, fairness=True, limit_priority=priority))
+def test_fairness_precedes_weights() -> None:
+    model = build_model(data(), replace(CONFIG, fairness=True))
     result = solve_lexicographic(model, HighsSolver())
     assert result.lexicographic_complete
-    assert result.stages[2].name == "fairness"
-    assert result.stages[2].objective_value == pytest.approx(0.75)
+    assert result.stages[1].name == "fairness"
+    assert result.stages[1].objective_value == pytest.approx(2 / 3)
     assert [
         model.variables.limit[pod, Resource.CPU].varValue for pod in ("steady", "spiky")
-    ] == pytest.approx([5.5, 4.5])
+    ] == pytest.approx([3, 7])
     assert sum(
         v.varValue for v in model.variables.minimum_limit_headroom.values()
-    ) == pytest.approx(0.75)
+    ) == pytest.approx(2 / 3)
 
 
 def test_zero_upper_bounds_and_zero_reward_remain_solvable() -> None:
@@ -107,7 +102,7 @@ def test_zero_upper_bounds_and_zero_reward_remain_solvable() -> None:
     model = build_model(source, replace(CONFIG, fairness=True))
     result = solve_lexicographic(model, HighsSolver())
     assert result.lexicographic_complete
-    assert [s.objective_value for s in result.stages] == pytest.approx([1, 0, 0, 0])
+    assert [s.objective_value for s in result.stages] == pytest.approx([1, 0, 0])
 
 
 def test_no_later_phase_after_feasible_but_unproven_result(monkeypatch) -> None:
@@ -171,9 +166,6 @@ def test_only_fairness_optimum_is_locked_not_intermediate_limits(monkeypatch) ->
     problem += fairness <= second
     stages = (
         ObjectiveStage("node_cost", pulp.LpAffineExpression(), pulp.LpMinimize),
-        ObjectiveStage(
-            "normalized_requests", pulp.LpAffineExpression(), pulp.LpMinimize
-        ),
         ObjectiveStage("fairness", fairness + 0, pulp.LpMaximize),
         ObjectiveStage("weighted_limits", second + 0, pulp.LpMaximize),
     )
@@ -188,11 +180,11 @@ def test_only_fairness_optimum_is_locked_not_intermediate_limits(monkeypatch) ->
     def choose_valid_fairness_optimum(self, current):
         nonlocal count
         count += 1
-        if count == 3:
+        if count == 2:
             # One valid fairness-optimal allocation, deliberately poor for phase 4.
             current.addConstraint(first == 8, "temporary_test_choice")
         result = original(self, current)
-        if count == 3:
+        if count == 2:
             assert first.varValue == pytest.approx(8)
             del current.constraints["temporary_test_choice"]
         return result
@@ -221,10 +213,76 @@ def test_time_budget_is_shared_across_phases(monkeypatch) -> None:
 
     monkeypatch.setattr(HighsSolver, "solve", timed)
     result = solve_lexicographic(
-        build_model(data(), CONFIG), HighsSolver(time_limit_seconds=3)
+        build_model(data(), replace(CONFIG, fairness=True)),
+        HighsSolver(time_limit_seconds=3),
     )
     assert budgets == [3, 1]
     assert result.status is SolverStatus.FEASIBLE
     assert not result.lexicographic_complete
     assert "before weighted_limits" in result.message
     assert result.solve_time_seconds == 4
+
+
+@pytest.mark.parametrize("solver_type", [HighsSolver, CbcSolver])
+def test_fairness_gap_only_applies_to_fairness_and_preserves_score(
+    monkeypatch, solver_type
+) -> None:
+    original = solver_type.solve
+    calls = []
+    achieved = []
+    model = build_model(data(), replace(CONFIG, fairness=True, fairness_mip_gap=0.05))
+
+    def gap_stop(self, problem):
+        calls.append(self.mip_gap)
+        if len(calls) == 3:
+            lock = problem.get_constraint_by_name("lexicographic_preserve_fairness")
+            assert lock is not None
+            assert -lock.constant == pytest.approx(
+                achieved[0] - model.config.lexicographic_tolerance
+            )
+        result = original(self, problem)
+        if len(calls) == 2:
+            achieved.append(result.objective_value)
+            return replace(result, status=SolverStatus.GAP_SATISFIED, mip_gap=0.04)
+        return result
+
+    monkeypatch.setattr(solver_type, "solve", gap_stop)
+    result = solve_lexicographic(model, solver_type())
+    assert calls == [0, 0.05, 0]
+    assert result.lexicographic_complete
+    assert result.status is SolverStatus.FEASIBLE
+    assert result.stages[1].status is SolverStatus.GAP_SATISFIED
+    assert result.stages[1].mip_gap == 0.04
+    assert pulp.value(model.stages[1].expression) >= achieved[0] - 1e-7
+
+
+def test_fairness_time_interruption_does_not_qualify_as_gap_acceptance(
+    monkeypatch,
+) -> None:
+    original = HighsSolver.solve
+    calls = []
+
+    def stopped(self, problem):
+        calls.append(self.mip_gap)
+        result = original(self, problem)
+        return (
+            replace(result, status=SolverStatus.FEASIBLE, mip_gap=0.2)
+            if len(calls) == 2
+            else result
+        )
+
+    monkeypatch.setattr(HighsSolver, "solve", stopped)
+    model = build_model(data(), replace(CONFIG, fairness=True, fairness_mip_gap=0.05))
+    result = solve_lexicographic(model, HighsSolver())
+    assert calls == [0, 0.05]
+    assert not result.lexicographic_complete
+    assert result.status is SolverStatus.FEASIBLE
+    assert "fairness" in result.message
+
+
+def test_zero_fairness_gap_preserves_exact_hierarchy() -> None:
+    result = solve_lexicographic(
+        build_model(data(), replace(CONFIG, fairness=True)), HighsSolver()
+    )
+    assert result.status is SolverStatus.OPTIMAL
+    assert result.lexicographic_complete

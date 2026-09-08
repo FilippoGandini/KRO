@@ -14,7 +14,7 @@ def add_replica_resource_equality_constraints(
     """Give replicas of one service identical requests and limits.
 
     Each replica is equated to one deterministic representative. This is
-    equivalent to pairwise equality, while requiring only two constraints per
+    equivalent to pairwise equality, while requiring only one constraint per
     additional replica and resource instead of a quadratic number.
     """
 
@@ -30,11 +30,6 @@ def add_replica_resource_equality_constraints(
         representative, *others = sorted(replicas, key=lambda pod: pod.pod_id)
         for replica in others:
             for resource in Resource:
-                model += (
-                    variables.request[replica.pod_id, resource]
-                    == variables.request[representative.pod_id, resource],
-                    f"replica_request_equal[{service_id},{replica.pod_id},{resource.value}]",
-                )
                 model += (
                     variables.limit[replica.pod_id, resource]
                     == variables.limit[representative.pod_id, resource],

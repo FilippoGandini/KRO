@@ -37,15 +37,6 @@ def build_objective_stages(
             ),
             pulp.LpMinimize,
         ),
-        ObjectiveStage(
-            "normalized_requests",
-            pulp.lpSum(
-                variables.request[key] / bound
-                for key, bound in bounds.request_upper.items()
-                if bound > 0
-            ),
-            pulp.LpMinimize,
-        ),
     ]
     if config.fairness:
         stages.append(
@@ -59,7 +50,7 @@ def build_objective_stages(
         ObjectiveStage(
             "weighted_limits",
             pulp.lpSum(
-                priorities[key].weight * variables.limit[key] / bound
+                priorities[key].spike_score * variables.limit[key] / bound
                 for key, bound in bounds.limit_upper.items()
                 if bound > 0
             ),

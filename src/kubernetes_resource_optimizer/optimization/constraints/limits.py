@@ -74,6 +74,7 @@ def add_limit_headroom_fairness_constraints(
     data: InputData,
     bounds: DerivedBounds,
     variables: ModelVariables,
+    requests: dict[tuple[str, Resource], float],
 ) -> None:
     """Bound alpha[h] by every workload's normalized limit headroom.
 
@@ -90,7 +91,7 @@ def add_limit_headroom_fairness_constraints(
                 variables.minimum_limit_headroom[resource]
                 <= (
                     variables.limit[pod.pod_id, resource]
-                    - variables.request[pod.pod_id, resource]
+                    - requests[pod.pod_id, resource]
                 )
                 / limit_upper,
                 f"minimum_limit_headroom_bound[{pod.pod_id},{resource.value}]",

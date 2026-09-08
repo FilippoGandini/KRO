@@ -14,6 +14,7 @@ from kubernetes_resource_optimizer.data.models import (
     UsageSample,
 )
 from kubernetes_resource_optimizer.optimization.config import OptimizationConfig
+from kubernetes_resource_optimizer.optimization.history import derive_history_parameters
 from kubernetes_resource_optimizer.optimization.objectives.priority import (
     derive_limit_priorities,
 )
@@ -38,27 +39,15 @@ def profiles() -> InputData:
     )
 
 
-def test_scores_are_dimensionless_and_preference_changes_ranking() -> None:
-    steady_weights, spike_weights = [], []
-    for preference in range(-2, 3):
-        priorities = derive_limit_priorities(
-            profiles(), replace(CONFIG, limit_priority=preference)
+def test_spike_is_unit_invariant_and_rewards_tail_exceedance() -> None:
+    priorities = derive_limit_priorities(derive_history_parameters(profiles(), CONFIG))
+    assert priorities["steady", Resource.CPU].spike_score == 0
+    assert priorities["spiky", Resource.CPU].spike_score == pytest.approx(7 / 8)
+    for pod in ("steady", "spiky"):
+        assert (
+            priorities[pod, Resource.CPU].spike_score
+            == priorities[pod, Resource.MEMORY].spike_score
         )
-        for pod in ("steady", "spiky"):
-            assert priorities[pod, Resource.CPU] == priorities[
-                pod, Resource.MEMORY
-            ].__class__(
-                priorities[pod, Resource.MEMORY].request_reference / 10,
-                priorities[pod, Resource.MEMORY].steady_score,
-                priorities[pod, Resource.MEMORY].spike_score,
-                priorities[pod, Resource.MEMORY].weight,
-            )
-        steady_weights.append(priorities["steady", Resource.CPU].weight)
-        spike_weights.append(priorities["spiky", Resource.CPU].weight)
-    assert steady_weights == sorted(steady_weights, reverse=True)
-    assert steady_weights[0] > spike_weights[0]
-    assert steady_weights[-1] < spike_weights[-1]
-    assert steady_weights[2] == 0.5
 
 
 @pytest.mark.parametrize("epsilon", [0, 0.25, 1])
@@ -73,20 +62,22 @@ def test_constant_zero_history_and_empty_partitions(
             replace(s, cpu_usage=value, memory_usage=value) for s in data.usage_samples
         ),
     )
-    priorities = derive_limit_priorities(
+    history = derive_history_parameters(
         data,
         replace(CONFIG, epsilon_cpu_request=epsilon, epsilon_memory_request=epsilon),
     )
+    priorities = derive_limit_priorities(history)
+    assert all(
+        request == (0 if epsilon == 1 else value)
+        for request in history.requests.values()
+    )
     for priority in priorities.values():
-        assert math.isfinite(priority.weight)
-        assert 0 <= priority.weight <= 1
-        assert priority.request_reference == (0 if epsilon == 1 else value)
+        assert math.isfinite(priority.spike_score)
+        assert 0 <= priority.spike_score <= 1
         if value == 0:
-            assert priority.weight == 0
+            assert priority.spike_score == 0
         if epsilon == 0:
             assert priority.spike_score == 0
-        if epsilon == 1:
-            assert priority.steady_score == 0
 
 
 def test_replica_reference_uses_hottest_replica_and_tail_cannot_be_negative() -> None:
@@ -94,22 +85,25 @@ def test_replica_reference_uses_hottest_replica_and_tail_cannot_be_negative() ->
     data = replace(
         data, pods=tuple(replace(p, service_id="service") for p in data.pods)
     )
-    priorities = derive_limit_priorities(data, CONFIG)
-    assert priorities["steady", Resource.CPU].request_reference == 2
-    assert priorities["spiky", Resource.CPU].request_reference == 2
+    priorities = derive_limit_priorities(derive_history_parameters(data, CONFIG))
+    assert derive_history_parameters(data, CONFIG).requests["steady", Resource.CPU] == 2
+    assert derive_history_parameters(data, CONFIG).requests["spiky", Resource.CPU] == 2
     assert priorities["spiky", Resource.CPU].spike_score == 0.75
 
 
 def test_missing_service_does_not_collide_with_pod_id() -> None:
     data = profiles()
     data = replace(data, pods=(Pod("steady"), Pod("spiky", service_id="steady")))
-    assert (
-        derive_limit_priorities(data, CONFIG)["spiky", Resource.CPU].request_reference
-        == 1
-    )
+    assert derive_history_parameters(data, CONFIG).requests["spiky", Resource.CPU] == 1
 
 
-@pytest.mark.parametrize("preference", [-3, 3, 0.5, True])
-def test_invalid_preference_rejected(preference: int) -> None:
-    with pytest.raises(ValueError, match="limit_priority"):
-        replace(CONFIG, limit_priority=preference)
+@pytest.mark.parametrize("multiplier", [0, 0.9, float("inf"), float("nan")])
+def test_invalid_peak_multiplier_rejected(multiplier: float) -> None:
+    with pytest.raises(ValueError, match="limit_peak_multiplier"):
+        replace(CONFIG, limit_peak_multiplier=multiplier)
+
+
+@pytest.mark.parametrize("gap", [-0.1, 1.1, float("inf"), float("nan")])
+def test_invalid_fairness_gap_rejected(gap: float) -> None:
+    with pytest.raises(ValueError, match="fairness_mip_gap"):
+        replace(CONFIG, fairness_mip_gap=gap)

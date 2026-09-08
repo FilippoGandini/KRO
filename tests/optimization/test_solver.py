@@ -69,3 +69,54 @@ def test_all_solvers_reject_invalid_time_limits(
 ) -> None:
     with pytest.raises(ValueError, match="time_limit_seconds"):
         solver_type(time_limit_seconds=invalid_limit)
+
+
+def test_cbc_gap_stop_is_distinct_from_time_stop() -> None:
+    from kubernetes_resource_optimizer.optimization.solver import (
+        SolverResult,
+        _cbc_termination,
+    )
+
+    incumbent = SolverResult(SolverStatus.OPTIMAL, 10, 1)
+    gap = _cbc_termination(
+        incumbent,
+        "Result - Optimal solution found (within gap tolerance)\nUpper bound: 10.4\nGap: -0.04\n",
+    )
+    assert gap.status is SolverStatus.GAP_SATISFIED
+    assert gap.mip_gap == pytest.approx(0.04)
+    assert gap.best_bound == pytest.approx(10.4)
+    timed = _cbc_termination(
+        incumbent, "Result - Stopped on time limit\nUpper bound: 12\nGap: -0.2\n"
+    )
+    assert timed.status is SolverStatus.FEASIBLE
+
+
+@pytest.mark.parametrize(
+    "native_status,gap,target,expected",
+    [
+        (SolverStatus.OPTIMAL, 0.04, 0.05, SolverStatus.GAP_SATISFIED),
+        (SolverStatus.OPTIMAL, 0.0, 0.05, SolverStatus.OPTIMAL),
+        (SolverStatus.FEASIBLE, 0.2, 0.05, SolverStatus.FEASIBLE),
+        (SolverStatus.OPTIMAL, 0.04, 0.0, SolverStatus.FEASIBLE),
+    ],
+)
+def test_highs_native_gap_is_not_misreported_as_exact_optimality(
+    monkeypatch, native_status, gap, target, expected
+) -> None:
+    from types import SimpleNamespace
+
+    import kubernetes_resource_optimizer.optimization.solver as adapter
+
+    model = pulp.LpProblem("native_status")
+
+    def native_solve(problem, command, solver):
+        problem.solverModel = SimpleNamespace(
+            getInfo=lambda: SimpleNamespace(mip_gap=gap, mip_dual_bound=10.4)
+        )
+        return adapter.SolverResult(native_status, 10, 1, solver)
+
+    monkeypatch.setattr(adapter, "_solve", native_solve)
+    result = HighsSolver(mip_gap=target).solve(model)
+    assert result.status is expected
+    assert result.mip_gap == gap
+    assert result.best_bound == 10.4

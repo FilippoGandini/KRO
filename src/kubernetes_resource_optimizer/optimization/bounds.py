@@ -1,7 +1,7 @@
 """Deterministic derivation of finite MILP bounds and Big-M parameters."""
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import ROUND_FLOOR, Decimal
 
 from kubernetes_resource_optimizer.data.models import (
@@ -17,11 +17,10 @@ BoundKey = tuple[str, Resource]
 
 @dataclass(frozen=True, slots=True)
 class DerivedBounds:
-    """Workload/resource indexed parameters required by the future MILP."""
+    """Workload/resource indexed parameters used by the MILP."""
 
     request_upper: dict[BoundKey, float]
     limit_upper: dict[BoundKey, float]
-    request_big_m: dict[BoundKey, float]
     limit_big_m: dict[BoundKey, float]
 
 
@@ -48,7 +47,10 @@ def _validate_bound(value: float, name: str) -> float:
 def _maximum_node_capacity(nodes: tuple[Node, ...], resource: Resource) -> float:
     if not nodes:
         raise ValueError("at least one candidate node is required to derive bounds")
-    capacities = [_validate_bound(_node_capacity(node, resource), "node capacity") for node in nodes]
+    capacities = [
+        _validate_bound(_node_capacity(node, resource), "node capacity")
+        for node in nodes
+    ]
     return max(capacities)
 
 
@@ -93,14 +95,6 @@ def _derive_big_m(
     return max(values)
 
 
-def derive_request_big_m(
-    pod_id: str, usage_samples: tuple[UsageSample, ...], resource: Resource
-) -> float:
-    """Derive M_request[i,h] as max_t u[i,t,h]."""
-
-    return _derive_big_m(pod_id, usage_samples, resource)
-
-
 def derive_limit_big_m(
     pod_id: str, usage_samples: tuple[UsageSample, ...], resource: Resource
 ) -> float:
@@ -122,27 +116,40 @@ def maximum_violation_count(epsilon: float, scenario_count: int) -> int:
     return int(product.to_integral_value(rounding=ROUND_FLOOR))
 
 
-def derive_bounds(data: InputData) -> DerivedBounds:
-    """Derive every R_max, L_max, M_request, and M_limit parameter."""
+def derive_bounds(
+    data: InputData, peaks: dict[BoundKey, float] | None = None
+) -> DerivedBounds:
+    """Derive request safety bounds, limit bounds, and limit Big-M."""
 
     request_upper: dict[BoundKey, float] = {}
     limit_upper: dict[BoundKey, float] = {}
-    request_big_m: dict[BoundKey, float] = {}
     limit_big_m: dict[BoundKey, float] = {}
     for pod in data.pods:
         for resource in Resource:
             key = (pod.pod_id, resource)
             request_upper[key] = derive_request_upper_bound(pod, data.nodes, resource)
             limit_upper[key] = derive_limit_upper_bound(pod, data.nodes, resource)
-            request_big_m[key] = derive_request_big_m(
-                pod.pod_id, data.usage_samples, resource
-            )
-            limit_big_m[key] = derive_limit_big_m(
-                pod.pod_id, data.usage_samples, resource
+            limit_big_m[key] = (
+                _validate_bound(peaks[key], "historical peak")
+                if peaks is not None
+                else derive_limit_big_m(pod.pod_id, data.usage_samples, resource)
             )
     return DerivedBounds(
         request_upper=request_upper,
         limit_upper=limit_upper,
-        request_big_m=request_big_m,
         limit_big_m=limit_big_m,
     )
+
+
+def apply_historical_limit_caps(
+    bounds: DerivedBounds, peaks: dict[BoundKey, float], multiplier: float
+) -> DerivedBounds:
+    """Intersect L_max with multiplier * max historical usage for each pod/resource."""
+    if not math.isfinite(multiplier) or multiplier < 1:
+        raise ValueError("limit_peak_multiplier must be finite and at least 1")
+    capped = {}
+    for key, upper in bounds.limit_upper.items():
+        peak_cap = multiplier * _validate_bound(peaks[key], "historical peak")
+        _validate_bound(peak_cap, f"historical limit cap for {key}")
+        capped[key] = min(upper, peak_cap)
+    return replace(bounds, limit_upper=capped)

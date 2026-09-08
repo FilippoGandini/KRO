@@ -49,7 +49,7 @@ def test_one_workload_one_node_uses_the_only_node() -> None:
     result = solve_lexicographic(built, CbcSolver())
 
     assert result.status is SolverStatus.OPTIMAL
-    assert result.objective_value == pytest.approx(1.0)
+    assert result.stages[0].objective_value == pytest.approx(1.0)
     assert built.variables.placement["pod-0", "node-0"].varValue == pytest.approx(1.0)
     assert built.variables.node_active["node-0"].varValue == pytest.approx(1.0)
 
@@ -60,8 +60,10 @@ def test_two_workloads_two_nodes_minimizes_to_one_active_node() -> None:
     result = solve_lexicographic(built, CbcSolver())
 
     assert result.status is SolverStatus.OPTIMAL
-    assert result.objective_value == pytest.approx(2.0)
-    assert sum(variable.varValue for variable in built.variables.node_active.values()) == pytest.approx(1.0)
+    assert result.stages[0].objective_value == pytest.approx(1.0)
+    assert sum(
+        variable.varValue for variable in built.variables.node_active.values()
+    ) == pytest.approx(1.0)
 
 
 def test_every_workload_is_assigned_exactly_once() -> None:
@@ -93,10 +95,9 @@ def test_inactive_node_cannot_host_a_workload() -> None:
 def test_request_cannot_exceed_limit(resource: Resource) -> None:
     built = build_model(make_data(pod_count=1, node_count=1), ZERO_RISK)
     built.problem.addConstraint(
-        built.variables.request["pod-0", resource] == 2.0, "force_request"
-    )
-    built.problem.addConstraint(
-        built.variables.limit["pod-0", resource] == 1.0, "force_limit"
+        built.variables.limit["pod-0", resource]
+        == built.requests["pod-0", resource] / 2,
+        "force_limit_below_request",
     )
 
     result = solve_lexicographic(built, CbcSolver())
@@ -107,28 +108,22 @@ def test_request_cannot_exceed_limit(resource: Resource) -> None:
 def test_request_and_limit_variables_use_derived_upper_bounds() -> None:
     built = build_model(make_data(pod_count=1, node_count=1), ZERO_RISK)
 
-    assert built.variables.request["pod-0", Resource.CPU].lowBound == 0
-    assert built.variables.request["pod-0", Resource.CPU].upBound == 2.0
-    assert built.variables.request["pod-0", Resource.MEMORY].upBound == 2048.0
     assert built.variables.limit["pod-0", Resource.CPU].lowBound == 0
-    assert built.variables.limit["pod-0", Resource.CPU].upBound == 4.0
-    assert built.variables.limit["pod-0", Resource.MEMORY].upBound == 4096.0
+    assert built.variables.limit["pod-0", Resource.CPU].upBound == 1.5
+    assert built.variables.limit["pod-0", Resource.MEMORY].upBound == 1536.0
 
 
 def test_model_contains_all_expected_variable_families() -> None:
     built = build_model(make_data(pod_count=2, node_count=2), ZERO_RISK)
 
-    assert len(built.problem.variables()) == 38
+    assert len(built.problem.variables()) == 22
     assert all(
         variable.name.startswith(
             (
                 "placement_",
                 "node_active_",
-                "request_",
                 "limit_",
-                "request_violation_",
                 "limit_violation_",
-                "effective_demand_",
                 "placed_limit_",
                 "minimum_limit_headroom_",
             )
@@ -136,12 +131,10 @@ def test_model_contains_all_expected_variable_families() -> None:
         for variable in built.problem.variables()
     )
     assert built.problem.sense == pulp.LpMinimize
-    assert [stage.name for stage in built.stages] == [
-        "node_cost", "normalized_requests", "weighted_limits"
-    ]
+    assert [stage.name for stage in built.stages] == ["node_cost", "weighted_limits"]
 
 
-def test_limit_headroom_is_distributed_fairly_after_requests_are_minimized() -> None:
+def test_limit_headroom_is_distributed_fairly_with_deterministic_requests() -> None:
     pods = tuple(
         Pod(
             f"pod-{index}",
@@ -155,9 +148,7 @@ def test_limit_headroom_is_distributed_fairly_after_requests_are_minimized() -> 
     data = InputData(
         nodes=(Node("node-0", 10, 1000),),
         pods=pods,
-        usage_samples=tuple(
-            UsageSample(TIMESTAMP, pod.pod_id, 1, 100) for pod in pods
-        ),
+        usage_samples=tuple(UsageSample(TIMESTAMP, pod.pod_id, 1, 100) for pod in pods),
     )
     config = OptimizationConfig(0, 0, 0, 0, 1, 1, fairness=True)
     built = build_model(data, config)
@@ -166,15 +157,23 @@ def test_limit_headroom_is_distributed_fairly_after_requests_are_minimized() -> 
 
     assert result.status is SolverStatus.OPTIMAL
     for pod in pods:
-        assert built.variables.request[pod.pod_id, Resource.CPU].varValue == pytest.approx(1)
-        assert built.variables.request[pod.pod_id, Resource.MEMORY].varValue == pytest.approx(100)
-        assert built.variables.limit[pod.pod_id, Resource.CPU].varValue == pytest.approx(5)
-        assert built.variables.limit[pod.pod_id, Resource.MEMORY].varValue == pytest.approx(500)
-    assert built.variables.minimum_limit_headroom[Resource.CPU].varValue == pytest.approx(0.4)
-    assert built.variables.minimum_limit_headroom[Resource.MEMORY].varValue == pytest.approx(0.4)
+        assert built.requests[pod.pod_id, Resource.CPU] == pytest.approx(1)
+        assert built.requests[pod.pod_id, Resource.MEMORY] == pytest.approx(100)
+        assert built.variables.limit[
+            pod.pod_id, Resource.CPU
+        ].varValue == pytest.approx(1.5)
+        assert built.variables.limit[
+            pod.pod_id, Resource.MEMORY
+        ].varValue == pytest.approx(150)
+    assert built.variables.minimum_limit_headroom[
+        Resource.CPU
+    ].varValue == pytest.approx(1 / 3)
+    assert built.variables.minimum_limit_headroom[
+        Resource.MEMORY
+    ].varValue == pytest.approx(1 / 3)
 
 
-def test_node_cost_is_primary_and_requests_only_break_cost_ties() -> None:
+def test_node_cost_is_primary_with_deterministic_requests() -> None:
     data = make_data(pod_count=1, node_count=2)
     data = InputData(
         nodes=(Node("cheap", 8, 8192, 0.10), Node("expensive", 8, 8192, 0.11)),

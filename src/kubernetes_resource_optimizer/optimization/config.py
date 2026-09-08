@@ -9,16 +9,7 @@ from kubernetes_resource_optimizer.optimization.bounds import maximum_violation_
 
 @dataclass(frozen=True, slots=True)
 class OptimizationConfig:
-    """Resource-specific chance tolerances and limit overcommit factors.
-
-    Epsilon values are empirical exceedance shares in ``[0, 1]``.
-    Choose request tolerances conservatively: the second phase minimizes
-    requests to their allowed coverage floor. ``limit_priority`` mixes steady
-    and peak indicators from -2 to +2; ``fairness`` inserts an optional phase
-    preserving the optimal sum of per-resource minimum normalized headroom. Limit overcommit factors
-    are finite and non-negative; a zero factor is permitted because it is a
-    meaningful (although often infeasible) model configuration.
-    """
+    """Independent coverage tolerances, burst cap, and optional fairness gap."""
 
     epsilon_cpu_request: float
     epsilon_memory_request: float
@@ -27,16 +18,28 @@ class OptimizationConfig:
     cpu_limit_overcommit: float
     memory_limit_overcommit: float
 
-    limit_priority: int = 0
+    limit_peak_multiplier: float = 1.5
+    fairness_mip_gap: float = 0.0
     fairness: bool = False
     lexicographic_tolerance: float = 1e-9
 
     def __post_init__(self) -> None:
-        if type(self.limit_priority) is not int or self.limit_priority not in range(-2, 3):
-            raise ValueError("limit_priority must be an integer from -2 to 2")
+        if (
+            not math.isfinite(self.limit_peak_multiplier)
+            or self.limit_peak_multiplier < 1
+        ):
+            raise ValueError("limit_peak_multiplier must be finite and at least 1")
+        if (
+            not math.isfinite(self.fairness_mip_gap)
+            or not 0 <= self.fairness_mip_gap <= 1
+        ):
+            raise ValueError("fairness_mip_gap must be finite and between 0 and 1")
         if type(self.fairness) is not bool:
             raise ValueError("fairness must be a boolean")
-        if not math.isfinite(self.lexicographic_tolerance) or self.lexicographic_tolerance < 0:
+        if (
+            not math.isfinite(self.lexicographic_tolerance)
+            or self.lexicographic_tolerance < 0
+        ):
             raise ValueError("lexicographic_tolerance must be finite and non-negative")
         epsilon_fields = (
             "epsilon_cpu_request",
@@ -81,13 +84,9 @@ class OptimizationConfig:
     ) -> int:
         """Return floor(epsilon_request[h] * |T|)."""
 
-        return maximum_violation_count(
-            self.epsilon_request(resource), scenario_count
-        )
+        return maximum_violation_count(self.epsilon_request(resource), scenario_count)
 
-    def maximum_limit_violations(
-        self, resource: Resource, scenario_count: int
-    ) -> int:
+    def maximum_limit_violations(self, resource: Resource, scenario_count: int) -> int:
         """Return floor(epsilon_limit[h] * |T|)."""
 
         return maximum_violation_count(self.epsilon_limit(resource), scenario_count)

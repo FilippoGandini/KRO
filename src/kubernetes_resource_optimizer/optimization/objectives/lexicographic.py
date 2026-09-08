@@ -22,7 +22,7 @@ def solve_lexicographic(
     solver: CbcSolver | HighsSolver,
     progress: Callable[[str], None] | None = None,
 ) -> SolverResult:
-    """Share a total time budget and advance only after certified optimal phases.
+    """Share a total time budget and accept a configured relative gap only in fairness.
 
     Cost is locked with no intentional degradation; normalized objectives use
     the configured absolute tolerance. Solver numerical tolerances still apply.
@@ -43,6 +43,7 @@ def solve_lexicographic(
     message = ""
     last_value: float | None = None
     complete = False
+    approximate_fairness = False
     try:
         for index, stage in enumerate(model.stages):
             remaining = None
@@ -62,7 +63,8 @@ def solve_lexicographic(
                 )
             problem.sense = stage.sense
             problem.setObjective(stage.expression)
-            result = replace(solver, time_limit_seconds=remaining, mip_gap=0).solve(
+            gap = model.config.fairness_mip_gap if stage.name == "fairness" else 0.0
+            result = replace(solver, time_limit_seconds=remaining, mip_gap=gap).solve(
                 problem
             )
             records.append(
@@ -71,10 +73,16 @@ def solve_lexicographic(
                     result.status,
                     result.objective_value,
                     result.solve_time_seconds,
+                    result.mip_gap,
+                    result.best_bound,
                 )
             )
             status = result.status
-            if status in {SolverStatus.OPTIMAL, SolverStatus.FEASIBLE}:
+            if status in {
+                SolverStatus.OPTIMAL,
+                SolverStatus.FEASIBLE,
+                SolverStatus.GAP_SATISFIED,
+            }:
                 snapshot = [
                     (variable, variable.varValue) for variable in problem.variables()
                 ]
@@ -83,13 +91,26 @@ def solve_lexicographic(
                 for variable, value in snapshot:
                     variable.varValue = value
                 status = SolverStatus.FEASIBLE
-            if result.status is not SolverStatus.OPTIMAL:
+            accepted_gap = (
+                stage.name == "fairness"
+                and gap > 0
+                and result.status is SolverStatus.GAP_SATISFIED
+            )
+            approximate_fairness |= accepted_gap
+            if result.status is not SolverStatus.OPTIMAL and not accepted_gap:
                 message = f"Phase {stage.name} ended as {result.status.value}; hierarchy incomplete."
                 break
             if index == len(model.stages) - 1:
                 complete = True
+                status = (
+                    SolverStatus.FEASIBLE
+                    if approximate_fairness
+                    else SolverStatus.OPTIMAL
+                )
                 message = (
-                    "All lexicographic phases optimal within numerical tolerances."
+                    "Hierarchy completed; fairness accepted within its configured MIP gap; achieved score preserved."
+                    if approximate_fairness
+                    else "All lexicographic phases optimal within numerical tolerances."
                 )
                 break
             assert result.objective_value is not None

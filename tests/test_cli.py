@@ -45,10 +45,21 @@ def test_cli_defaults_to_highs_with_an_unlimited_runtime() -> None:
 def test_priority_and_fairness_options() -> None:
     base = ["--nodes", "n.csv", "--workloads", "w.csv", "--usage", "u.csv"]
     defaults = build_parser().parse_args(base)
-    assert defaults.limit_priority == 0
+    assert defaults.limit_peak_multiplier == 1.5
+    assert defaults.fairness_mip_gap == 0
     assert not defaults.fairness
-    selected = build_parser().parse_args([*base, "--limit-priority", "-2", "--fairness"])
-    assert selected.limit_priority == -2
+    selected = build_parser().parse_args(
+        [
+            *base,
+            "--limit-peak-multiplier",
+            "2",
+            "--fairness-mip-gap",
+            "0.05",
+            "--fairness",
+        ]
+    )
+    assert selected.limit_peak_multiplier == 2
+    assert selected.fairness_mip_gap == 0.05
     assert selected.fairness
     with pytest.raises(SystemExit):
-        build_parser().parse_args([*base, "--limit-priority", "3"])
+        build_parser().parse_args([*base, "--limit-peak-multiplier", "invalid"])

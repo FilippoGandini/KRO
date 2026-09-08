@@ -64,16 +64,13 @@ def extract_solution(
         raise ValueError("a feasible solution must have an objective value")
 
     variables = model.variables
-    assigned_by_node: dict[str, list[str]] = {
-        node.node_id: [] for node in data.nodes
-    }
+    assigned_by_node: dict[str, list[str]] = {node.node_id: [] for node in data.nodes}
     assigned_node_by_pod: dict[str, str] = {}
     for pod in data.pods:
         assigned_nodes = [
             node.node_id
             for node in data.nodes
-            if _value(variables.placement[pod.pod_id, node.node_id])
-            > _BINARY_THRESHOLD
+            if _value(variables.placement[pod.pod_id, node.node_id]) > _BINARY_THRESHOLD
         ]
         if len(assigned_nodes) != 1:
             raise ValueError(
@@ -86,12 +83,8 @@ def extract_solution(
     workloads = tuple(
         WorkloadResult(
             workload_id=pod.pod_id,
-            recommended_cpu_request=_value(
-                variables.request[pod.pod_id, Resource.CPU]
-            ),
-            recommended_memory_request=_value(
-                variables.request[pod.pod_id, Resource.MEMORY]
-            ),
+            recommended_cpu_request=model.requests[pod.pod_id, Resource.CPU],
+            recommended_memory_request=model.requests[pod.pod_id, Resource.MEMORY],
             recommended_cpu_limit=_value(variables.limit[pod.pod_id, Resource.CPU]),
             recommended_memory_limit=_value(
                 variables.limit[pod.pod_id, Resource.MEMORY]
@@ -120,7 +113,7 @@ def extract_solution(
     for pod in data.pods:
         samples = samples_by_pod[pod.pod_id]
         for resource in Resource:
-            request = _value(variables.request[pod.pod_id, resource])
+            request = model.requests[pod.pod_id, resource]
             limit = _value(variables.limit[pod.pod_id, resource])
             request_count = sum(
                 _usage(sample, resource) > request + _COMPARISON_TOLERANCE
@@ -152,7 +145,7 @@ def extract_solution(
                     sum(
                         max(
                             _usage(sample, resource),
-                            _value(variables.request[sample.pod_id, resource]),
+                            model.requests[sample.pod_id, resource],
                         )
                         for sample in timestamp_samples
                         if sample.pod_id in assigned_pods
@@ -163,8 +156,7 @@ def extract_solution(
             )
         configured_ratios = {
             resource: sum(
-                _value(variables.limit[pod_id, resource])
-                for pod_id in assigned_pods
+                _value(variables.limit[pod_id, resource]) for pod_id in assigned_pods
             )
             / _capacity(node, resource)
             for resource in Resource

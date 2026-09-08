@@ -60,12 +60,10 @@ def test_workload_specific_bounds_take_precedence() -> None:
 def test_big_m_is_finite_non_negative_and_tight_to_peak_usage() -> None:
     bounds = derive_bounds(sample_data())
 
-    assert bounds.request_big_m["default", Resource.CPU] == 2.5
+    assert bounds.limit_big_m["default", Resource.CPU] == 2.5
     assert bounds.limit_big_m["default", Resource.MEMORY] == 1536.0
-    assert bounds.request_big_m == bounds.limit_big_m
     assert all(
-        math.isfinite(value) and value >= 0
-        for value in bounds.request_big_m.values()
+        math.isfinite(value) and value >= 0 for value in bounds.limit_big_m.values()
     )
 
 
@@ -95,3 +93,20 @@ def test_bounds_require_usage_for_every_pod() -> None:
 
     with pytest.raises(ValueError, match="bounded.*no usage samples"):
         derive_bounds(incomplete)
+
+
+def test_historical_cap_uses_peak_independently_of_big_m() -> None:
+    from dataclasses import replace
+
+    from kubernetes_resource_optimizer.optimization.bounds import (
+        apply_historical_limit_caps,
+    )
+
+    bounds = derive_bounds(sample_data())
+    peaks = dict(bounds.limit_big_m)
+    modified = replace(
+        bounds, limit_big_m={key: value * 2 for key, value in peaks.items()}
+    )
+    capped = apply_historical_limit_caps(modified, peaks, 1.5)
+    assert capped.limit_upper["default", Resource.CPU] == 3.75
+    assert capped.limit_big_m["default", Resource.CPU] == 5

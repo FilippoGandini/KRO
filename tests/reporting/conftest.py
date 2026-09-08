@@ -53,8 +53,8 @@ def solved_report_problem() -> SolvedProblem:
             ),
         ),
         usage_samples=(
-            UsageSample(start, "pod-a", 1.0, 100.0),
-            UsageSample(start, "pod-b", 0.5, 200.0),
+            UsageSample(start, "pod-a", 2.0, 250.0),
+            UsageSample(start, "pod-b", 1.0, 300.0),
             UsageSample(start + timedelta(hours=1), "pod-a", 3.0, 300.0),
             UsageSample(start + timedelta(hours=1), "pod-b", 1.0, 400.0),
         ),
@@ -71,11 +71,10 @@ def solved_report_problem() -> SolvedProblem:
         ("pod-b", Resource.MEMORY, "limit"): 500.0,
     }
     for (pod_id, resource, family), value in fixed_values.items():
-        variable = (
-            built.variables.request[pod_id, resource]
-            if family == "request"
-            else built.variables.limit[pod_id, resource]
-        )
+        if family == "request":
+            assert built.requests[pod_id, resource] == value
+            continue
+        variable = built.variables.limit[pod_id, resource]
         built.problem.addConstraint(
             variable == value, f"fix_report_{family}_{pod_id}_{resource.value}"
         )

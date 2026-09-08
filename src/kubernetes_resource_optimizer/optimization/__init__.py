@@ -6,7 +6,6 @@ from kubernetes_resource_optimizer.optimization.bounds import (
     derive_bounds,
     derive_limit_big_m,
     derive_limit_upper_bound,
-    derive_request_big_m,
     derive_request_upper_bound,
 )
 from kubernetes_resource_optimizer.optimization.config import OptimizationConfig
@@ -49,7 +48,6 @@ __all__ = [
     "derive_limit_big_m",
     "derive_limit_priorities",
     "derive_limit_upper_bound",
-    "derive_request_big_m",
     "derive_request_upper_bound",
     "solve_lexicographic",
 ]

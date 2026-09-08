@@ -47,8 +47,8 @@ def make_data() -> InputData:
             ),
         ),
         usage_samples=(
-            UsageSample(START, "pod-a", 1.0, 100.0),
-            UsageSample(START, "pod-b", 0.5, 200.0),
+            UsageSample(START, "pod-a", 2.0, 250.0),
+            UsageSample(START, "pod-b", 1.0, 300.0),
             UsageSample(START + timedelta(hours=1), "pod-a", 3.0, 300.0),
             UsageSample(START + timedelta(hours=1), "pod-b", 1.0, 400.0),
         ),
@@ -58,7 +58,6 @@ def make_data() -> InputData:
 def solve_known_configuration() -> tuple[InputData, object, SolverResult]:
     data = make_data()
     built = build_model(data, CONFIG)
-    variables = built.variables
     # Fix rightsizing values while leaving placement and node minimization to the MILP.
     fixed_values = {
         ("pod-a", Resource.CPU, "request"): 2.0,
@@ -71,11 +70,10 @@ def solve_known_configuration() -> tuple[InputData, object, SolverResult]:
         ("pod-b", Resource.MEMORY, "limit"): 500.0,
     }
     for (pod_id, resource, family), value in fixed_values.items():
-        variable = (
-            variables.request[pod_id, resource]
-            if family == "request"
-            else variables.limit[pod_id, resource]
-        )
+        if family == "request":
+            assert built.requests[pod_id, resource] == value
+            continue
+        variable = built.variables.limit[pod_id, resource]
         built.problem.addConstraint(
             variable == value, f"fix_{family}_{pod_id}_{resource.value}"
         )
@@ -90,7 +88,9 @@ def test_extracts_workloads_nodes_and_summary() -> None:
     result = extract_solution(data, built, solver_result)
 
     assert result.solver_status is SolverStatus.OPTIMAL
-    assert result.objective_value == pytest.approx(103 / 96)
+    assert result.objective_value == pytest.approx(
+        (1 / 3) * (3 / 4) + (1 / 6) * (350 / 450) + (1 / 4) * (500 / 600)
+    )
     assert result.lexicographic_complete
     assert result.stages == solver_result.stages
     assert result.active_node_count == 1
@@ -114,9 +114,7 @@ def test_calculates_actual_violation_rates_and_node_diagnostics() -> None:
     data, built, solver_result = solve_known_configuration()
 
     result = extract_solution(data, built, solver_result)
-    violation = {
-        (item.workload_id, item.resource): item for item in result.violations
-    }
+    violation = {(item.workload_id, item.resource): item for item in result.violations}
 
     assert violation["pod-a", Resource.CPU].request_violation_count == 1
     assert violation["pod-a", Resource.CPU].request_violation_rate == pytest.approx(0.5)
@@ -124,14 +122,18 @@ def test_calculates_actual_violation_rates_and_node_diagnostics() -> None:
     assert violation["pod-a", Resource.MEMORY].request_violation_count == 1
     assert violation["pod-a", Resource.MEMORY].limit_violation_count == 0
     assert violation["pod-b", Resource.CPU].request_violation_rate == 0
-    assert violation["pod-b", Resource.MEMORY].request_violation_rate == pytest.approx(0.5)
+    assert violation["pod-b", Resource.MEMORY].request_violation_rate == pytest.approx(
+        0.5
+    )
 
     active = next(
         item
         for item in result.node_diagnostics
         if next(node for node in result.nodes if node.node_id == item.node_id).active
     )
-    inactive = next(item for item in result.node_diagnostics if item.node_id != active.node_id)
+    inactive = next(
+        item for item in result.node_diagnostics if item.node_id != active.node_id
+    )
     assert active.peak_effective_cpu == pytest.approx(4.0)
     assert active.peak_effective_memory == pytest.approx(700.0)
     assert active.configured_cpu_limit_overcommit == pytest.approx(4.5 / 4.0)

@@ -30,7 +30,7 @@ def test_replicas_receive_identical_requests_and_limits() -> None:
             Pod("api-1", service_id="api"),
         ),
         usage_samples=(
-            UsageSample(TIMESTAMP, "api-0", 1, 512),
+            UsageSample(TIMESTAMP, "api-0", 1.5, 768),
             UsageSample(TIMESTAMP, "api-1", 2, 1024),
         ),
     )
@@ -40,14 +40,14 @@ def test_replicas_receive_identical_requests_and_limits() -> None:
 
     assert result.status is SolverStatus.OPTIMAL
     for resource in Resource:
-        assert built.variables.request["api-0", resource].varValue == pytest.approx(
-            built.variables.request["api-1", resource].varValue
+        assert built.requests["api-0", resource] == pytest.approx(
+            built.requests["api-1", resource]
         )
         assert built.variables.limit["api-0", resource].varValue == pytest.approx(
             built.variables.limit["api-1", resource].varValue
         )
-    assert built.variables.request["api-0", Resource.CPU].varValue == pytest.approx(2)
-    assert built.variables.request["api-0", Resource.MEMORY].varValue == pytest.approx(1024)
+    assert built.requests["api-0", Resource.CPU] == pytest.approx(2)
+    assert built.requests["api-0", Resource.MEMORY] == pytest.approx(1024)
 
 
 def test_pods_without_service_id_are_not_tied_together() -> None:
@@ -64,5 +64,5 @@ def test_pods_without_service_id_are_not_tied_together() -> None:
     result = solve_lexicographic(built, CbcSolver())
 
     assert result.status is SolverStatus.OPTIMAL
-    assert built.variables.request["pod-0", Resource.CPU].varValue == pytest.approx(1)
-    assert built.variables.request["pod-1", Resource.CPU].varValue == pytest.approx(2)
+    assert built.requests["pod-0", Resource.CPU] == pytest.approx(1)
+    assert built.requests["pod-1", Resource.CPU] == pytest.approx(2)

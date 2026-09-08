@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, replace
 from enum import StrEnum
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from time import perf_counter
 from typing import Protocol
 
@@ -30,6 +33,7 @@ class SolverStatus(StrEnum):
 
     OPTIMAL = "optimal"
     FEASIBLE = "feasible"
+    GAP_SATISFIED = "gap_satisfied"
     INFEASIBLE = "infeasible"
     UNBOUNDED = "unbounded"
     NOT_SOLVED = "not_solved"
@@ -44,6 +48,8 @@ class StageResult:
     status: SolverStatus
     objective_value: float | None
     solve_time_seconds: float
+    mip_gap: float | None = None
+    best_bound: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +63,8 @@ class SolverResult:
     stages: tuple[StageResult, ...] = ()
     lexicographic_complete: bool = False
     message: str = ""
+    mip_gap: float | None = None
+    best_bound: float | None = None
 
 
 class MilpSolver(Protocol):
@@ -112,7 +120,21 @@ class HighsSolver:
             gapRel=self.mip_gap,
             gapAbs=0.0,
         )
-        return _solve(model, command, SolverName.HIGHS)
+        result = _solve(model, command, SolverName.HIGHS)
+        info = model.solverModel.getInfo()
+        gap: float | None = float(info.mip_gap)
+        bound: float | None = float(info.mip_dual_bound)
+        gap = gap if gap is not None and math.isfinite(gap) else None
+        bound = bound if bound is not None and math.isfinite(bound) else None
+        status = result.status
+        # HiGHS reports kOptimal also when its relative gap target is reached.
+        if status is SolverStatus.OPTIMAL and gap is not None and gap > 0:
+            status = (
+                SolverStatus.GAP_SATISFIED
+                if self.mip_gap is not None and gap <= self.mip_gap
+                else SolverStatus.FEASIBLE
+            )
+        return replace(result, status=status, mip_gap=gap, best_bound=bound)
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,14 +155,47 @@ class CbcSolver:
         variable values, named constraints, or export the model after solving.
         """
 
-        solver = pulp.COIN_CMD(
-            msg=self.log_output,
-            timeLimit=self.time_limit_seconds,
-            gapRel=self.mip_gap,
-            gapAbs=0.0,
-            path=pulp.PULP_CBC_CMD.pulp_cbc_path,
-        )
-        return _solve(model, solver, SolverName.CBC)
+        # CBC's PuLP status loses the distinction between exact and gap termination.
+        # Read the explicit termination reason from its local log instead.
+        with TemporaryDirectory(prefix=".cbc-log-", dir=".") as directory:
+            log = Path(directory) / "solve.log"
+            solver = pulp.COIN_CMD(
+                msg=False,
+                timeLimit=self.time_limit_seconds,
+                gapRel=self.mip_gap,
+                gapAbs=0.0,
+                path=pulp.PULP_CBC_CMD.pulp_cbc_path,
+                logPath=str(log),
+            )
+            result = _solve(model, solver, SolverName.CBC)
+            output = log.read_text()
+            if self.log_output:
+                print(output, end="")
+            return _cbc_termination(result, output)
+
+
+def _cbc_termination(result: SolverResult, output: str) -> SolverResult:
+    """Use CBC's certified stop reason; printed gap/bound are rounded diagnostics."""
+    gap_match = re.search(r"^Gap:\s+([-+0-9.eE]+)", output, re.MULTILINE)
+    bound_match = re.search(
+        r"^(?:Upper|Lower) bound:\s+([-+0-9.eE]+)", output, re.MULTILINE
+    )
+    status = result.status
+    if (
+        "Optimal solution found (within gap tolerance)" in output
+        and result.objective_value is not None
+    ):
+        status = SolverStatus.GAP_SATISFIED
+    elif "Stopped on time limit" in output and result.objective_value is not None:
+        status = SolverStatus.FEASIBLE
+    return replace(
+        result,
+        status=status,
+        mip_gap=abs(float(gap_match[1]))
+        if gap_match
+        else (0.0 if status is SolverStatus.OPTIMAL else None),
+        best_bound=float(bound_match[1]) if bound_match else None,
+    )
 
 
 def create_solver(

@@ -54,50 +54,37 @@ def solve(built: OptimizationModel) -> SolverStatus:
     return CbcSolver().solve(built.problem).status
 
 
-def force_request(
-    built: OptimizationModel, pod_id: str, resource: Resource, value: float
-) -> None:
-    built.problem.addConstraint(
-        built.variables.request[pod_id, resource] == value,
-        f"force_request_{pod_id}_{resource.value}",
-    )
-
-
-def test_x_zero_allows_effective_demand_to_be_zero() -> None:
+def test_capacity_coefficients_use_maximum_of_usage_and_request() -> None:
     data = make_data(
-        nodes=(Node("unused", 10, 10_000), Node("used", 10, 10_000)),
+        nodes=(Node("node", 10, 10000),), usage={"pod": [(2, 200), (5, 500)]}
+    )
+    for config, expected in [
+        (ZERO_RISK, (5, 5)),
+        (OptimizationConfig(0.5, 0.5, 0, 0, 1.5, 1.5), (2, 5)),
+    ]:
+        built = build_model(data, config)
+        placement = built.variables.placement["pod", "node"]
+        for t, coefficient in zip((START, START + timedelta(hours=1)), expected):
+            constraint = next(
+                c
+                for name, c in built.problem.constraints.items()
+                if name.startswith("runtime_capacity")
+                and t.isoformat().replace("-", "_").replace("+", "_") in name
+                and "cpu" in name
+            )
+            assert constraint[placement] == coefficient
+        assert solve(built) is SolverStatus.OPTIMAL
+
+
+def test_unused_node_has_zero_effective_demand() -> None:
+    data = make_data(
+        nodes=(Node("unused", 11, 10000), Node("used", 10, 10000)),
         usage={"pod": [(3, 300)]},
     )
     built = build_model(data, ZERO_RISK)
-    q = built.variables.effective_demand["pod", "unused", START, Resource.CPU]
     built.problem.addConstraint(built.variables.placement["pod", "unused"] == 0)
-    built.problem.addConstraint(q == 0)
-
+    built.problem.addConstraint(built.variables.node_active["unused"] == 0)
     assert solve(built) is SolverStatus.OPTIMAL
-    assert q.varValue == pytest.approx(0)
-    assert q.lowBound == 0
-
-
-def test_x_one_and_usage_below_request_enforces_request() -> None:
-    data = make_data(nodes=(Node("node", 10, 10_000),), usage={"pod": [(2, 200)]})
-    built = build_model(data, ZERO_RISK)
-    force_request(built, "pod", Resource.CPU, 4)
-    q = built.variables.effective_demand["pod", "node", START, Resource.CPU]
-    built.problem.setObjective(q)
-
-    assert solve(built) is SolverStatus.OPTIMAL
-    assert q.varValue == pytest.approx(4)
-
-
-def test_x_one_and_usage_above_request_enforces_usage() -> None:
-    data = make_data(nodes=(Node("node", 10, 10_000),), usage={"pod": [(5, 200)]})
-    built = build_model(data, OptimizationConfig(1, 0, 0, 0, 1.5, 1.5))
-    force_request(built, "pod", Resource.CPU, 2)
-    q = built.variables.effective_demand["pod", "node", START, Resource.CPU]
-    built.problem.setObjective(q)
-
-    assert solve(built) is SolverStatus.OPTIMAL
-    assert q.varValue == pytest.approx(5)
 
 
 @pytest.mark.parametrize(
@@ -121,7 +108,7 @@ def test_placement_feasibility_is_checked_in_every_scenario() -> None:
         usage={"pod": [(0, 100), (7, 100)]},
     )
     built = build_model(data, OptimizationConfig(0.5, 0, 0, 0, 1.5, 1.5))
-    force_request(built, "pod", Resource.CPU, 0)
+    assert built.requests["pod", Resource.CPU] == 0
 
     assert solve(built) is SolverStatus.OPTIMAL
     assert built.variables.placement["pod", "small"].varValue == pytest.approx(0)
@@ -136,20 +123,28 @@ def test_simultaneous_effective_demands_force_two_nodes() -> None:
     built = build_model(data, ZERO_RISK)
 
     assert solve(built) is SolverStatus.OPTIMAL
-    assert sum(v.varValue for v in built.variables.node_active.values()) == pytest.approx(2)
-    assert (
-        built.variables.placement["pod-a", "node-a"].varValue
-        + built.variables.placement["pod-b", "node-a"].varValue
-        == pytest.approx(1)
+    assert sum(
+        v.varValue for v in built.variables.node_active.values()
+    ) == pytest.approx(2)
+    assert built.variables.placement[
+        "pod-a", "node-a"
+    ].varValue + built.variables.placement["pod-b", "node-a"].varValue == pytest.approx(
+        1
     )
 
 
 @pytest.mark.parametrize(
-    ("pod_count", "node_count", "scenario_count", "expected_variables", "expected_constraints"),
+    (
+        "pod_count",
+        "node_count",
+        "scenario_count",
+        "expected_variables",
+        "expected_constraints",
+    ),
     [
-        (1, 1, 1, 14, 28),
-        (1, 2, 2, 28, 60),
-        (2, 2, 1, 38, 79),
+        (1, 1, 1, 8, 20),
+        (1, 2, 2, 14, 38),
+        (2, 2, 1, 22, 55),
     ],
 )
 def test_model_size_is_reported_for_focused_instances(
@@ -161,13 +156,14 @@ def test_model_size_is_reported_for_focused_instances(
 ) -> None:
     data = make_data(
         nodes=tuple(Node(f"node-{j}", 10, 10_000) for j in range(node_count)),
-        usage={
-            f"pod-{i}": [(1, 100)] * scenario_count for i in range(pod_count)
-        },
+        usage={f"pod-{i}": [(1, 100)] * scenario_count for i in range(pod_count)},
     )
     built = build_model(data, ZERO_RISK)
 
     assert len(built.problem.variables()) == expected_variables
     assert built.problem.numConstraints() == expected_constraints
-    assert all(q.lowBound == 0 for q in built.variables.effective_demand.values())
+    assert not any(
+        v.name.startswith(("request_", "effective_demand_"))
+        for v in built.problem.variables()
+    )
     assert built.problem.sense == pulp.LpMinimize

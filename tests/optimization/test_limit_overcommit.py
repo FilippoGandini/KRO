@@ -35,14 +35,12 @@ def make_data(*, node_count: int = 1, pod_count: int = 1) -> InputData:
     return InputData(
         nodes=tuple(Node(f"node-{index}", 10, 1_000) for index in range(node_count)),
         pods=pods,
-        usage_samples=tuple(
-            UsageSample(TIMESTAMP, pod.pod_id, 1, 100) for pod in pods
-        ),
+        usage_samples=tuple(UsageSample(TIMESTAMP, pod.pod_id, 1, 100) for pod in pods),
     )
 
 
 def config(cpu: float, memory: float) -> OptimizationConfig:
-    return OptimizationConfig(0, 0, 0, 0, cpu, memory)
+    return OptimizationConfig(0, 0, 0, 0, cpu, memory, limit_peak_multiplier=10)
 
 
 def solve(built: OptimizationModel) -> SolverStatus:
@@ -60,9 +58,7 @@ def force_limit(
 
 def test_x_zero_forces_placed_limit_to_zero() -> None:
     built = build_model(make_data(node_count=2), config(2, 2))
-    placed_limit = built.variables.placed_limit[
-        "pod-0", "node-0", Resource.CPU
-    ]
+    placed_limit = built.variables.placed_limit["pod-0", "node-0", Resource.CPU]
     force_limit(built, "pod-0", Resource.CPU, 4)
     built.problem.addConstraint(built.variables.placement["pod-0", "node-0"] == 0)
 
@@ -73,9 +69,7 @@ def test_x_zero_forces_placed_limit_to_zero() -> None:
 
 def test_x_one_forces_placed_limit_to_equal_limit() -> None:
     built = build_model(make_data(), config(2, 2))
-    placed_limit = built.variables.placed_limit[
-        "pod-0", "node-0", Resource.CPU
-    ]
+    placed_limit = built.variables.placed_limit["pod-0", "node-0", Resource.CPU]
     force_limit(built, "pod-0", Resource.CPU, 4)
 
     assert solve(built) is SolverStatus.OPTIMAL
