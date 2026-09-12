@@ -1,12 +1,13 @@
 """Matplotlib chart generation with a headless, cross-platform backend."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import matplotlib
 
 matplotlib.use("Agg")
 
+import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 
 from kubernetes_resource_optimizer.data.models import Resource
@@ -39,13 +40,13 @@ def _configure_scenario_axis(axis: plt.Axes, timestamps: tuple[datetime, ...]) -
     positions = list(range(0, count, step))
     if positions[-1] != count - 1:
         positions.append(count - 1)
-    axis.set_xticks(positions)
+    axis.set_xticks(mdates.date2num([timestamps[index] for index in positions]))
     axis.set_xticklabels(
-        [timestamps[index].strftime("%Y-%m-%d\n%H:%M") for index in positions],
+        [timestamps[index].astimezone(UTC).strftime("%Y-%m-%d\n%H:%M") for index in positions],
         rotation=30,
         ha="right",
     )
-    axis.set_xlabel("Time")
+    axis.set_xlabel("Time (UTC)")
 
 
 def save_node_chart(cpu: NodeSeries, memory: NodeSeries, destination: Path) -> None:
@@ -53,7 +54,7 @@ def save_node_chart(cpu: NodeSeries, memory: NodeSeries, destination: Path) -> N
 
     figure, axes = plt.subplots(2, 1, figsize=(12, 9), constrained_layout=True)
     for axis, series in zip(axes, (cpu, memory), strict=True):
-        x_values = list(range(len(series.timestamps)))
+        x_values = mdates.date2num(series.timestamps)
         if series.effective_demand:
             axis.stackplot(
                 x_values,
@@ -66,7 +67,7 @@ def save_node_chart(cpu: NodeSeries, memory: NodeSeries, destination: Path) -> N
                 alpha=0.82,
             )
         axis.axhline(
-            series.capacity, color="#C62828", linewidth=2, label="Node capacity"
+            series.capacity, color="#455A64", linewidth=2, label="Node capacity"
         )
         axis.axhline(
             series.aggregate_request,
@@ -84,7 +85,7 @@ def save_node_chart(cpu: NodeSeries, memory: NodeSeries, destination: Path) -> N
         )
         axis.axhline(
             series.limit_boundary,
-            color="#EF6C00",
+            color="#607D8B",
             linestyle="-.",
             linewidth=1.5,
             label="Limit overcommit boundary",
@@ -107,7 +108,7 @@ def save_workload_chart(
 
     figure, axes = plt.subplots(2, 1, figsize=(12, 8), constrained_layout=True)
     for axis, series in zip(axes, (cpu, memory), strict=True):
-        x_values = list(range(len(series.timestamps)))
+        x_values = mdates.date2num(series.timestamps)
         axis.plot(
             x_values,
             series.usage,
@@ -142,7 +143,7 @@ def save_workload_chart(
         ]
         if request_x:
             axis.scatter(
-                request_x,
+                [x_values[index] for index in request_x],
                 [series.usage[index] for index in request_x],
                 color="#EF6C00",
                 s=30,
@@ -151,7 +152,7 @@ def save_workload_chart(
             )
         if limit_x:
             axis.scatter(
-                limit_x,
+                [x_values[index] for index in limit_x],
                 [series.usage[index] for index in limit_x],
                 color="#C62828",
                 marker="x",

@@ -32,7 +32,7 @@ def test_generates_html_and_svg_charts(
     assert "CPU capacity (cores)" in document
     assert "Memory capacity</th>" in document
     assert "<td>3.90625 GiB</td>" in document
-    assert "<td>250 MiB</td><td>350 MiB</td>" in document
+    assert "<td>250.000 MiB</td><td>350.000 MiB</td>" in document
     assert "CPU request (cores)" in document
     assert "CPU limit (cores)" in document
     assert "pod-a" in document

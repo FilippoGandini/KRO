@@ -23,11 +23,12 @@ from kubernetes_resource_optimizer.reporting.series import (
 from kubernetes_resource_optimizer.solution.models import OptimizationResult
 
 
-def _format_memory(memory_mib: float) -> str:
+def _format_memory(memory_mib: float, *, fixed_precision: bool = False) -> str:
     """Choose a binary memory unit independently for each table cell."""
+    precision = ".3f" if fixed_precision else "g"
     if memory_mib >= 1024:
-        return f"{memory_mib / 1024:g} GiB"
-    return f"{memory_mib:g} MiB"
+        return f"{memory_mib / 1024:{precision}} GiB"
+    return f"{memory_mib:{precision}} MiB"
 
 
 def _filename(identifier: str) -> str:
@@ -180,16 +181,16 @@ def generate_html_report(
         (
             workload.workload_id,
             workload.assigned_node,
-            f"{workload.recommended_cpu_request:g}",
-            f"{workload.recommended_cpu_limit:g}",
-            _format_memory(workload.recommended_memory_request),
-            _format_memory(workload.recommended_memory_limit),
+            f"{workload.recommended_cpu_request:.3f}",
+            f"{workload.recommended_cpu_limit:.3f}",
+            _format_memory(workload.recommended_memory_request, fixed_precision=True),
+            _format_memory(workload.recommended_memory_limit, fixed_precision=True),
             *(
-                f"{violations[workload.workload_id, resource].request_violation_count:,}"
+                f"{violations[workload.workload_id, resource].request_violation_rate:.2%}"
                 for resource in (Resource.CPU, Resource.MEMORY)
             ),
             *(
-                f"{violations[workload.workload_id, resource].limit_violation_count:,}"
+                f"{violations[workload.workload_id, resource].limit_violation_rate:.2%}"
                 for resource in (Resource.CPU, Resource.MEMORY)
             ),
         )
@@ -200,8 +201,8 @@ def generate_html_report(
         (
             "Workload",
             "Node",
-            "CPU request (core)",
-            "CPU limit (core)",
+            "CPU request (cores)",
+            "CPU limit (cores)",
             "Memory request",
             "Memory limit",
         ),
@@ -217,10 +218,16 @@ def generate_html_report(
                 str(config.limit_peak_multiplier),
                 "Hard limit cap relative to each pod historical maximum.",
             ),
-            (
-                "Fairness MIP gap",
-                f"{config.fairness_mip_gap:.2%}",
-                "Relative optimality gap accepted only in the optional fairness phase.",
+            *(
+                [
+                    (
+                        "Fairness MIP gap",
+                        f"{config.fairness_mip_gap:.2%}",
+                        "Relative optimality gap accepted only in the optional fairness phase.",
+                    )
+                ]
+                if config.fairness
+                else []
             ),
             (
                 "Fairness",
@@ -272,7 +279,32 @@ def generate_html_report(
             for node in data.nodes
             if node.node_id in active_node_ids
         ],
-        ("Node", "CPU capacity (core)", "Memory capacity", "Cost"),
+        ("Node", "CPU capacity (cores)", "Memory capacity", "Cost"),
+    )
+    node_bars: list[str] = []
+    for cpu, memory in zip(node_cpu, node_memory, strict=True):
+        bars = []
+        for series in (cpu, memory):
+            peak = max(series.total_effective_demand, default=0.0)
+            ratio = peak / series.capacity
+            remaining = series.capacity - peak
+            margin = (
+                f"{remaining:.3f} cores"
+                if series.resource is Resource.CPU
+                else _format_memory(remaining)
+            )
+            alert = " alert" if ratio > 1 + 1e-7 else ""
+            bars.append(
+                f'<div class="node-bar{alert}"><span>{series.resource.value.upper()}: '
+                f'{ratio:.1%} · Remaining: {margin}</span>'
+                f'<div class="bar-track"><div class="bar-fill" '
+                f'style="width:{min(100, max(0, ratio * 100)):.4f}%"></div></div></div>'
+            )
+        node_bars.append(f'<div class="node-comparison-row"><strong>{html.escape(cpu.node_id)}</strong><div class="node-resources">{"".join(bars)}</div></div>')
+    node_comparison = '<div class="node-comparison"><p>Peak effective demand / capacity</p>' + "".join(node_bars) + '</div>'
+    node_options = "".join(
+        f'<option value="{html.escape(identifier, quote=True)}">{html.escape(identifier)}</option>'
+        for identifier in sorted(active_node_ids)
     )
     node_sections = "".join(
         f'<section><h3>{html.escape(identifier)}</h3><img src="{html.escape(path)}" alt="Node {html.escape(identifier)} allocation chart"></section>'
@@ -286,20 +318,87 @@ def generate_html_report(
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kubernetes Resource Optimizer report</title>
 <style>
-body{{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;max-width:1500px;margin:auto;padding:2rem;color:#263238;background:#fafafa}}
+body{{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;max-width:1500px;margin:auto;padding:2rem;color:#263238;background:#f5f5f5}}
 h1,h2,h3{{color:#102A43}} section{{background:white;padding:1rem 1.25rem;margin:1rem 0;border:1px solid #dfe3e6;border-radius:8px}}
 table{{border-collapse:collapse;width:100%;background:white;margin:1rem 0}} th,td{{border:1px solid #dfe3e6;padding:.55rem;text-align:center}} th{{background:#eef3f7}}
-img{{display:block;max-width:100%;height:auto;margin:auto}} .note{{padding:.8rem 1rem;background:#fff8e1;border-left:4px solid #f9a825}}
+img{{display:block;max-width:100%;height:auto;margin:auto}} .note{{padding:.8rem 1rem;background:#eceff1;border-left:4px solid #78909c}}
+.selected-nodes{{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1.5rem;align-items:center}}
+.selected-nodes table{{margin:0}}
+.node-comparison{{background:white;padding:1rem;border:1px solid #dfe3e6;border-radius:8px}}
+.node-comparison>p{{margin:0 0 .8rem}} .node-comparison-row+ .node-comparison-row{{border-top:1px solid #e5e7eb;margin-top:.75rem;padding-top:.75rem}}
+.node-resources{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}} .node-bar{{margin:.4rem 0 0;min-width:0}} .node-bar span{{display:block;font-size:.85rem;line-height:1.5;margin-bottom:.25rem}} .bar-track{{height:12px;background:#e5e7eb;border-radius:3px;overflow:hidden}} .bar-fill{{height:100%;background:#4C78A8}} .alert .bar-fill{{background:#C62828}}
+.table-controls{{display:flex;gap:1rem;align-items:center;flex-wrap:wrap}} input,select{{font:inherit;padding:.4rem}}
+.table-scroll{{max-height:650px;overflow:auto}} #recommendations table{{margin:0}} #recommendations thead{{position:sticky;top:0;z-index:1;background:#eef3f7}}
+#recommendations td{{text-align:right;font-variant-numeric:tabular-nums}} #recommendations td:nth-child(-n+2){{text-align:left}}
+#recommendations th button{{font:inherit;font-weight:600;color:inherit;border:0;background:transparent;cursor:pointer;width:100%}}
+@media(max-width:900px){{.selected-nodes{{grid-template-columns:1fr}}}}
+@media(max-width:500px){{.node-resources{{grid-template-columns:1fr;gap:.5rem}}}}
 </style></head><body>
 <h1>Kubernetes Resource Optimizer report</h1>
 <p class="note">Effective node demand is computed as <code>max(historical usage, recommended request)</code> for each placed workload. SVG files are portable and can be opened independently.</p>
 <h2>Summary</h2>{summary}
 <h2>Optimization settings</h2>{settings_table}
-<h2>Selected nodes</h2>{selected_nodes_table}
-<h2>Recommendations</h2>{workload_table}
+<h2>Selected nodes</h2><div class="selected-nodes"><div>{selected_nodes_table}</div>{node_comparison}</div>
+<h2>Recommendations</h2>
+<div class="table-controls"><label>Workload <input id="workload-search" type="search" placeholder="Search workload"></label>
+<label>Node <select id="node-filter"><option value="">All nodes</option>{node_options}</select></label>
+<span id="row-count" role="status"></span></div>
+<div id="recommendations" class="table-scroll">{workload_table}</div>
 <h2>Active node allocation</h2>{node_sections}
 <h2>Workload usage and boundaries</h2>{workload_sections}
+{_TABLE_SCRIPT}
 </body></html>"""
     index = output_directory / "index.html"
     index.write_text(document, encoding="utf-8")
     return index
+
+
+_TABLE_SCRIPT = """<script>
+(() => {
+  const table = document.querySelector('#recommendations table');
+  const rows = Array.from(table.tBodies[0].rows);
+  const search = document.getElementById('workload-search');
+  const filter = document.getElementById('node-filter');
+  const update = () => {
+    let count = 0;
+    rows.forEach(row => {
+      row.hidden = !row.cells[0].textContent.toLowerCase().includes(search.value.toLowerCase()) ||
+        (filter.value !== '' && row.cells[1].textContent !== filter.value);
+      if (!row.hidden) count++;
+    });
+    document.getElementById('row-count').textContent = `${count} / ${rows.length} workloads`;
+  };
+  search.addEventListener('input', update);
+  filter.addEventListener('change', update);
+  const headings = Array.from(table.querySelectorAll('th[scope="col"]'));
+  headings.forEach((heading, column) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    const label = heading.textContent;
+    button.textContent = label + ' ↕';
+    heading.textContent = '';
+    heading.append(button);
+    heading.setAttribute('aria-sort', 'none');
+    button.addEventListener('click', () => {
+      const ascending = heading.getAttribute('aria-sort') !== 'ascending';
+      headings.forEach(item => {
+        item.setAttribute('aria-sort', 'none');
+        item.firstChild.textContent = item.firstChild.textContent.replace(/ [↕↑↓]$/, ' ↕');
+      });
+      heading.setAttribute('aria-sort', ascending ? 'ascending' : 'descending');
+      button.textContent = label + (ascending ? ' ↑' : ' ↓');
+      const value = row => {
+        const text = row.cells[column].textContent;
+        return column < 2 ? text : parseFloat(text) * (text.includes('GiB') ? 1024 : 1);
+      };
+      rows.sort((a, b) => {
+        const x = value(a), y = value(b);
+        const order = column < 2 ? x.localeCompare(y, undefined, {numeric:true}) : x - y;
+        return ascending ? order : -order;
+      });
+      rows.forEach(row => table.tBodies[0].append(row));
+    });
+  });
+  update();
+})();
+</script>"""
