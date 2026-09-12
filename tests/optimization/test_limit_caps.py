@@ -71,7 +71,7 @@ def test_request_upper_below_coverage_is_infeasible() -> None:
     assert solve_lexicographic(model, HighsSolver()).status is SolverStatus.INFEASIBLE
 
 
-def test_replica_common_request_can_conflict_with_individual_peak_cap() -> None:
+def test_replica_common_request_uses_largest_service_cap() -> None:
     data = source()
     samples = tuple(
         replace(s, pod_id="other", cpu_usage=0.1) for s in data.usage_samples
@@ -85,7 +85,12 @@ def test_replica_common_request_can_conflict_with_individual_peak_cap() -> None:
     assert (
         model.requests["p", Resource.CPU] == model.requests["other", Resource.CPU] == 1
     )
-    assert solve_lexicographic(model, HighsSolver()).status is SolverStatus.INFEASIBLE
+    assert solve_lexicographic(model, HighsSolver()).status is SolverStatus.OPTIMAL
+    assert model.variables.limit["other", Resource.CPU].upBound == 6
+    assert (
+        model.variables.limit["other", Resource.CPU].varValue
+        == model.variables.limit["p", Resource.CPU].varValue
+    )
 
 
 @pytest.mark.parametrize("solver_type", [HighsSolver, CbcSolver])

@@ -59,7 +59,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--limit-peak-multiplier",
         type=float,
         default=1.5,
-        help="Hard limit cap as a multiple of each pod's historical peak (default: 1.5).",
+        help="Individual candidate cap multiplier; replicas share their maximum cap (default: 1.5).",
     )
     parser.add_argument(
         "--fairness-mip-gap",

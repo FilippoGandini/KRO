@@ -8,8 +8,7 @@ from kubernetes_resource_optimizer.data.models import InputData
 from kubernetes_resource_optimizer.optimization.bounds import (
     BoundKey,
     DerivedBounds,
-    apply_historical_limit_caps,
-    derive_bounds,
+    resolve_bounds,
 )
 from kubernetes_resource_optimizer.optimization.config import OptimizationConfig
 from kubernetes_resource_optimizer.optimization.constraints import (
@@ -58,44 +57,46 @@ def build_model(
 ) -> OptimizationModel:
     """Build the complete first-version MILP formulation.
 
-    Requests are coverage order statistics; limits have a hard historical cap.
+    Requests are coverage order statistics; limits use shared service caps.
     """
 
     history = derive_history_parameters(data, config)
     requests = history.requests
-    resolved_bounds = (
-        bounds if bounds is not None else derive_bounds(data, history.peaks)
-    )
+    effective_service_bounds = resolve_bounds(
+        data, history.peaks, config.limit_peak_multiplier, bounds
+    ).effective_service
     priorities = derive_limit_priorities(history)
-    resolved_bounds = apply_historical_limit_caps(
-        resolved_bounds, history.peaks, config.limit_peak_multiplier
-    )
     problem = pulp.LpProblem("kubernetes_resource_optimizer", pulp.LpMinimize)
     variables = create_variables(
-        problem, data, resolved_bounds, fairness=config.fairness
+        problem, data, effective_service_bounds, fairness=config.fairness
     )
 
     add_assignment_constraints(problem, data, variables)
     add_node_activation_constraints(problem, data, variables)
     add_equivalent_node_activation_order_constraints(problem, data, variables)
-    add_limit_chance_constraints(problem, data, config, resolved_bounds, variables)
+    add_limit_chance_constraints(
+        problem, data, config, effective_service_bounds, variables
+    )
     add_request_limit_ordering_constraints(problem, data, variables, requests)
     add_replica_resource_equality_constraints(problem, data, variables)
     add_runtime_capacity_constraints(problem, data, variables, requests)
-    add_limit_linearization_constraints(problem, data, resolved_bounds, variables)
+    add_limit_linearization_constraints(
+        problem, data, effective_service_bounds, variables
+    )
     add_limit_overcommit_constraints(problem, data, config, variables)
     if config.fairness:
         add_limit_headroom_fairness_constraints(
-            problem, data, resolved_bounds, variables, requests
+            problem, data, effective_service_bounds, variables, requests
         )
     for key, request in requests.items():
         # Keep incompatible deterministic requests as explicit infeasible constraints.
         problem += (
-            pulp.LpAffineExpression() <= resolved_bounds.request_upper[key] - request,
+            pulp.LpAffineExpression()
+            <= effective_service_bounds.request_upper[key] - request,
             f"request_upper[{key[0]},{key[1].value}]",
         )
     stages = build_objective_stages(
-        data, variables, resolved_bounds, config, priorities
+        data, variables, effective_service_bounds, config, priorities
     )
     problem.setObjective(stages[0].expression)
 

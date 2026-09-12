@@ -23,6 +23,13 @@ from kubernetes_resource_optimizer.reporting.series import (
 from kubernetes_resource_optimizer.solution.models import OptimizationResult
 
 
+def _format_memory(memory_mib: float) -> str:
+    """Choose a binary memory unit independently for each table cell."""
+    if memory_mib >= 1024:
+        return f"{memory_mib / 1024:g} GiB"
+    return f"{memory_mib:g} MiB"
+
+
 def _filename(identifier: str) -> str:
     slug = re.sub(r"[^A-Za-z0-9._-]+", "-", identifier).strip("-.") or "item"
     digest = hashlib.sha256(identifier.encode()).hexdigest()[:8]
@@ -175,8 +182,8 @@ def generate_html_report(
             workload.assigned_node,
             f"{workload.recommended_cpu_request:g}",
             f"{workload.recommended_cpu_limit:g}",
-            f"{workload.recommended_memory_request:g}",
-            f"{workload.recommended_memory_limit:g}",
+            _format_memory(workload.recommended_memory_request),
+            _format_memory(workload.recommended_memory_limit),
             *(
                 f"{violations[workload.workload_id, resource].request_violation_count:,}"
                 for resource in (Resource.CPU, Resource.MEMORY)
@@ -193,10 +200,10 @@ def generate_html_report(
         (
             "Workload",
             "Node",
-            "CPU request",
-            "CPU limit",
-            "Memory request (MiB)",
-            "Memory limit (MiB)",
+            "CPU request (core)",
+            "CPU limit (core)",
+            "Memory request",
+            "Memory limit",
         ),
         column_groups=(
             ("Request violations", ("CPU", "Memory")),
@@ -259,13 +266,13 @@ def generate_html_report(
             (
                 node.node_id,
                 f"{node.cpu_capacity:g}",
-                f"{node.memory_capacity:g}",
+                _format_memory(node.memory_capacity),
                 f"{node.cost:g}",
             )
             for node in data.nodes
             if node.node_id in active_node_ids
         ],
-        ("Node", "CPU capacity (cores)", "Memory capacity (MiB)", "Cost"),
+        ("Node", "CPU capacity (core)", "Memory capacity", "Cost"),
     )
     node_sections = "".join(
         f'<section><h3>{html.escape(identifier)}</h3><img src="{html.escape(path)}" alt="Node {html.escape(identifier)} allocation chart"></section>'

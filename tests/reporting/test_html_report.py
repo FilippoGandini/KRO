@@ -30,7 +30,11 @@ def test_generates_html_and_svg_charts(
     assert "1h" in document
     assert "Selected nodes" in document
     assert "CPU capacity (cores)" in document
-    assert "Memory capacity (MiB)" in document
+    assert "Memory capacity</th>" in document
+    assert "<td>3.90625 GiB</td>" in document
+    assert "<td>250 MiB</td><td>350 MiB</td>" in document
+    assert "CPU request (cores)" in document
+    assert "CPU limit (cores)" in document
     assert "pod-a" in document
     assert len(tuple((index.parent / "nodes").glob("*.svg"))) == 1
     assert len(tuple((index.parent / "workloads").glob("*.svg"))) == 2

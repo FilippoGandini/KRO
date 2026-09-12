@@ -8,10 +8,10 @@ from kubernetes_resource_optimizer.data.models import InputData, Resource
 from kubernetes_resource_optimizer.optimization.bounds import (
     BoundKey,
     DerivedBounds,
-    apply_historical_limit_caps,
-    derive_bounds,
+    resolve_bounds,
 )
 from kubernetes_resource_optimizer.optimization.config import OptimizationConfig
+from kubernetes_resource_optimizer.optimization.groups import replica_groups
 from kubernetes_resource_optimizer.optimization.history import derive_history_parameters
 
 
@@ -27,18 +27,13 @@ def feasibility_diagnostics(
     """
     yield "Feasibility diagnostics (CPU cores; memory MiB; input-only checks):"
     history = derive_history_parameters(data, config)
-    base = bounds if bounds is not None else derive_bounds(data, history.peaks)
-    capped = apply_historical_limit_caps(
-        base, history.peaks, config.limit_peak_multiplier
-    )
-    groups: defaultdict[tuple[bool, str], list[str]] = defaultdict(list)
-    for pod in data.pods:
-        groups[pod.service_id is not None, pod.service_id or pod.pod_id].append(
-            pod.pod_id
-        )
+    resolved = resolve_bounds(data, history.peaks, config.limit_peak_multiplier, bounds)
+    base = resolved.base
+    individual_candidate_caps = resolved.individual_candidates.limit_upper
+    effective_service_caps = resolved.effective_service.limit_upper
     lower: dict[BoundKey, float] = {}
-    upper: dict[BoundKey, float] = {}
-    for members in groups.values():
+    for group in replica_groups(data):
+        members = [pod.pod_id for pod in group]
         for resource in Resource:
             floors = []
             for pod_id in members:
@@ -52,9 +47,6 @@ def feasibility_diagnostics(
                 )
             for pod_id in members:
                 lower[pod_id, resource] = max(floors)
-                upper[pod_id, resource] = min(
-                    capped.limit_upper[p, resource] for p in members
-                )
 
     for pod in data.pods:
         for resource in Resource:
@@ -64,11 +56,11 @@ def feasibility_diagnostics(
             required = len(values) - config.maximum_limit_violations(
                 resource, len(values)
             )
-            covered = sum(value <= upper[key] for value in values)
+            covered = sum(value <= effective_service_caps[key] for value in values)
             flags = []
             if history.requests[key] > base.request_upper[key]:
                 flags.append("request > request_upper")
-            if lower[key] > upper[key]:
+            if lower[key] > effective_service_caps[key]:
                 flags.append("shared minimum limit > shared cap")
             if covered < required:
                 flags.append("limit coverage unreachable")
@@ -77,8 +69,8 @@ def feasibility_diagnostics(
                 f"request_rank={rank}/{len(values)} individual_floor={values[rank - 1] if rank else 0:g} "
                 f"request={history.requests[key]:g} request_upper={base.request_upper[key]:g} "
                 f"peak={history.peaks[key]:g} limit_bound={base.limit_upper[key]:g} "
-                f"peak_multiplier={config.limit_peak_multiplier:g} cap={capped.limit_upper[key]:g} "
-                f"shared_cap={upper[key]:g} minimum_limit={lower[key]:g} "
+                f"peak_multiplier={config.limit_peak_multiplier:g} candidate_cap={individual_candidate_caps[key]:g} "
+                f"shared_cap={effective_service_caps[key]:g} minimum_limit={lower[key]:g} "
                 f"limit_coverage_at_shared_cap={covered}/{len(values)} required={required}; "
                 + ("CONFLICT: " + "; ".join(flags) if flags else "OK")
             )

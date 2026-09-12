@@ -11,6 +11,7 @@ from kubernetes_resource_optimizer.data.models import (
     Resource,
     UsageSample,
 )
+from kubernetes_resource_optimizer.optimization.groups import replica_groups
 
 BoundKey = tuple[str, Resource]
 
@@ -144,7 +145,7 @@ def derive_bounds(
 def apply_historical_limit_caps(
     bounds: DerivedBounds, peaks: dict[BoundKey, float], multiplier: float
 ) -> DerivedBounds:
-    """Intersect L_max with multiplier * max historical usage for each pod/resource."""
+    """Derive individual candidate caps; these are not final service bounds."""
     if not math.isfinite(multiplier) or multiplier < 1:
         raise ValueError("limit_peak_multiplier must be finite and at least 1")
     capped = {}
@@ -153,3 +154,36 @@ def apply_historical_limit_caps(
         _validate_bound(peak_cap, f"historical limit cap for {key}")
         capped[key] = min(upper, peak_cap)
     return replace(bounds, limit_upper=capped)
+
+
+def share_service_limit_caps(data: InputData, bounds: DerivedBounds) -> DerivedBounds:
+    """Apply the maximum individual candidate cap to every replica of a service."""
+    upper = dict(bounds.limit_upper)
+    for members in replica_groups(data):
+        for resource in Resource:
+            cap = max(bounds.limit_upper[pod.pod_id, resource] for pod in members)
+            for pod in members:
+                upper[pod.pod_id, resource] = cap
+    return replace(bounds, limit_upper=upper)
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedBounds:
+    """Separate supplied/fallback bounds, candidate caps and effective service caps."""
+
+    base: DerivedBounds
+    individual_candidates: DerivedBounds
+    effective_service: DerivedBounds
+
+
+def resolve_bounds(
+    data: InputData,
+    peaks: dict[BoundKey, float],
+    multiplier: float,
+    bounds: DerivedBounds | None = None,
+) -> ResolvedBounds:
+    """Single cap derivation pipeline for model assembly and input diagnostics."""
+    base = bounds if bounds is not None else derive_bounds(data, peaks)
+    individual_candidates = apply_historical_limit_caps(base, peaks, multiplier)
+    effective_service = share_service_limit_caps(data, individual_candidates)
+    return ResolvedBounds(base, individual_candidates, effective_service)

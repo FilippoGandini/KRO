@@ -22,9 +22,9 @@ def test_replica_caps_and_request_upper_conflicts() -> None:
         feasibility_diagnostics(data, OptimizationConfig(0, 0, 0, 0, 1, 1))
     )
     assert "request > request_upper" in output
-    assert "shared minimum limit > shared cap" in output
-    assert "limit_coverage_at_shared_cap=0/1 required=1" in output
-    assert "shared_cap=1.5 minimum_limit=4" in output
+    assert "shared minimum limit > shared cap" not in output
+    assert "limit_coverage_at_shared_cap=1/1 required=1" in output
+    assert "shared_cap=6 minimum_limit=4" in output
 
 
 def test_joint_resource_candidates_and_aggregate_overcommit() -> None:

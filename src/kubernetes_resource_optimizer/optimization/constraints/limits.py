@@ -5,6 +5,7 @@ import pulp
 from kubernetes_resource_optimizer.data.models import InputData, Node, Resource
 from kubernetes_resource_optimizer.optimization.bounds import DerivedBounds
 from kubernetes_resource_optimizer.optimization.config import OptimizationConfig
+from kubernetes_resource_optimizer.optimization.groups import replica_groups
 from kubernetes_resource_optimizer.optimization.variables import ModelVariables
 
 
@@ -82,7 +83,8 @@ def add_limit_headroom_fairness_constraints(
     ``(l[i,h] - r[i,h]) / L_max[i,h]`` is linear.
     """
 
-    for pod in data.pods:
+    for members in replica_groups(data):
+        pod = members[0]
         for resource in Resource:
             limit_upper = bounds.limit_upper[pod.pod_id, resource]
             if limit_upper == 0:
