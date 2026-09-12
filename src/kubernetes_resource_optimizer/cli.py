@@ -11,6 +11,9 @@ from time import perf_counter
 from kubernetes_resource_optimizer.data.csv_loader import load_input_data
 from kubernetes_resource_optimizer.data.validation import InputValidationError
 from kubernetes_resource_optimizer.optimization.config import OptimizationConfig
+from kubernetes_resource_optimizer.optimization.diagnostics import (
+    feasibility_diagnostics,
+)
 from kubernetes_resource_optimizer.optimization.model import build_model
 from kubernetes_resource_optimizer.optimization.objectives.lexicographic import (
     solve_lexicographic,
@@ -172,6 +175,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (RuntimeError, ValueError) as error:
         parser.error(str(error))
     _progress(f"Solver finished: {solver_result.status.value}. {solver_result.message}")
+    if solver_result.status is SolverStatus.INFEASIBLE or any(
+        stage.status is SolverStatus.INFEASIBLE for stage in solver_result.stages
+    ):
+        for line in feasibility_diagnostics(data, config):
+            _progress(line)
     if solver_result.status not in {SolverStatus.OPTIMAL, SolverStatus.FEASIBLE}:
         print(f"Solver status: {solver_result.status.value}")
         print("No feasible recommendation is available.")

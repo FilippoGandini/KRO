@@ -63,3 +63,28 @@ def test_priority_and_fairness_options() -> None:
     assert selected.fairness
     with pytest.raises(SystemExit):
         build_parser().parse_args([*base, "--limit-peak-multiplier", "invalid"])
+
+
+def test_cli_prints_infeasibility_diagnostics(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    example_dir = Path(__file__).parents[1] / "data" / "examples"
+    exit_code = main(
+        [
+            "--nodes",
+            str(example_dir / "nodes.csv"),
+            "--workloads",
+            str(example_dir / "workloads.csv"),
+            "--usage",
+            str(example_dir / "usage.csv"),
+            "--cpu-limit-overcommit",
+            "0",
+        ]
+    )
+    output = capsys.readouterr()
+    assert exit_code == 1
+    assert "Phase node_cost: status=infeasible; incumbent=False" in output.err
+    assert "Feasibility diagnostics" in output.err
+    assert "CONFLICT: zero candidate nodes" in output.err
+    assert "CONFLICT: aggregate capacity exceeded" in output.err
+    assert "No feasible recommendation is available." in output.out

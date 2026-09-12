@@ -67,6 +67,14 @@ def solve_lexicographic(
             result = replace(solver, time_limit_seconds=remaining, mip_gap=gap).solve(
                 problem
             )
+            if progress:
+                progress(
+                    f"Phase {stage.name}: status={result.status.value}; "
+                    f"incumbent={result.objective_value is not None}; "
+                    f"objective={result.objective_value}; gap={result.mip_gap}; "
+                    f"bound={result.best_bound}; elapsed={result.solve_time_seconds:.3f}s; "
+                    f"active_locks={locks}. {result.message}"
+                )
             records.append(
                 StageResult(
                     stage.name,
@@ -127,6 +135,8 @@ def solve_lexicographic(
             )
             problem.addConstraint(constraint, lock_name)
             locks.append(lock_name)
+            if progress:
+                progress(f"Objective lock {lock_name}: {constraint}")
     finally:
         for lock_name in locks:
             del problem.constraints[lock_name]
