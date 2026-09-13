@@ -286,3 +286,73 @@ def test_zero_fairness_gap_preserves_exact_hierarchy() -> None:
     )
     assert result.status is SolverStatus.OPTIMAL
     assert result.lexicographic_complete
+
+
+@pytest.mark.parametrize("solver_type", [HighsSolver, CbcSolver])
+@pytest.mark.parametrize("fairness", [False, True])
+@pytest.mark.parametrize(
+    "final_status,gap,complete,overall",
+    [
+        (SolverStatus.GAP_SATISFIED, 0.05, True, SolverStatus.FEASIBLE),
+        (SolverStatus.OPTIMAL, 0.05, True, SolverStatus.OPTIMAL),
+        (SolverStatus.FEASIBLE, 0.05, False, SolverStatus.FEASIBLE),
+        (SolverStatus.GAP_SATISFIED, 0.0, False, SolverStatus.GAP_SATISFIED),
+    ],
+)
+def test_limits_gap_termination_policy(
+    monkeypatch, solver_type, fairness, final_status, gap, complete, overall
+) -> None:
+    model = build_model(
+        data(), replace(CONFIG, fairness=fairness, limits_mip_gap=gap)
+    )
+    original = solver_type.solve
+    calls = []
+    achieved = []
+
+    def stop(self, problem):
+        calls.append(self.mip_gap)
+        result = original(self, problem)
+        if fairness and len(calls) == 2:
+            achieved.append(result.objective_value)
+        if len(calls) == len(model.stages):
+            # Even a small reported gap on a time stop is not certification.
+            return replace(result, status=final_status, mip_gap=0.01)
+        return result
+
+    monkeypatch.setattr(solver_type, "solve", stop)
+    result = solve_lexicographic(model, solver_type())
+    assert calls == ([0, 0, gap] if fairness else [0, gap])
+    assert result.lexicographic_complete is complete
+    assert result.status is overall
+    assert result.stages[-1].status is final_status
+    assert result.stages[-1].mip_gap == 0.01
+    assert result.stages[0].objective_value == pytest.approx(1)
+    if fairness:
+        assert pulp.value(model.stages[1].expression) >= achieved[0] - 1e-7
+    assert not any(
+        name.startswith("lexicographic_preserve_")
+        for name in model.problem.constraints
+    )
+
+
+@pytest.mark.parametrize("solver_type", [HighsSolver, CbcSolver])
+def test_both_phase_gaps_are_independent(monkeypatch, solver_type) -> None:
+    model = build_model(
+        data(),
+        replace(CONFIG, fairness=True, fairness_mip_gap=0.03, limits_mip_gap=0.07),
+    )
+    original = solver_type.solve
+    calls = []
+
+    def stop(self, problem):
+        calls.append(self.mip_gap)
+        result = original(self, problem)
+        if len(calls) > 1:
+            return replace(result, status=SolverStatus.GAP_SATISFIED)
+        return result
+
+    monkeypatch.setattr(solver_type, "solve", stop)
+    result = solve_lexicographic(model, solver_type())
+    assert calls == [0, 0.03, 0.07]
+    assert result.lexicographic_complete
+    assert result.status is SolverStatus.FEASIBLE

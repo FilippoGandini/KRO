@@ -31,3 +31,16 @@ def test_rejects_invalid_epsilon(epsilon: float) -> None:
 def test_rejects_invalid_overcommit_factor(factor: float) -> None:
     with pytest.raises(ValueError, match="cpu_limit_overcommit"):
         OptimizationConfig(0, 0, 0, 0, factor, 1)
+
+
+@pytest.mark.parametrize("gap", [-0.01, 1.01, math.inf, -math.inf, math.nan])
+def test_rejects_invalid_limits_mip_gap(gap: float) -> None:
+    with pytest.raises(ValueError, match="limits_mip_gap"):
+        OptimizationConfig(0, 0, 0, 0, 1, 1, limits_mip_gap=gap)
+
+
+@pytest.mark.parametrize("gap", [0, 0.01, 1])
+def test_accepts_limits_mip_gap(gap: float) -> None:
+    assert OptimizationConfig(0, 0, 0, 0, 1, 1).limits_mip_gap == 0
+    config = OptimizationConfig(0, 0, 0, 0, 1, 1, limits_mip_gap=gap)
+    assert config.limits_mip_gap == gap

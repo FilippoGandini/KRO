@@ -9,7 +9,7 @@ from kubernetes_resource_optimizer.optimization.bounds import maximum_violation_
 
 @dataclass(frozen=True, slots=True)
 class OptimizationConfig:
-    """Independent coverage tolerances, burst cap, and optional fairness gap."""
+    """Independent coverage tolerances, burst cap, and phase-specific MIP gaps."""
 
     epsilon_cpu_request: float
     epsilon_memory_request: float
@@ -22,6 +22,7 @@ class OptimizationConfig:
     fairness_mip_gap: float = 0.0
     fairness: bool = False
     lexicographic_tolerance: float = 1e-9
+    limits_mip_gap: float = 0.0
 
     def __post_init__(self) -> None:
         if (
@@ -29,11 +30,10 @@ class OptimizationConfig:
             or self.limit_peak_multiplier < 1
         ):
             raise ValueError("limit_peak_multiplier must be finite and at least 1")
-        if (
-            not math.isfinite(self.fairness_mip_gap)
-            or not 0 <= self.fairness_mip_gap <= 1
-        ):
-            raise ValueError("fairness_mip_gap must be finite and between 0 and 1")
+        for field in ("fairness_mip_gap", "limits_mip_gap"):
+            value = getattr(self, field)
+            if not math.isfinite(value) or not 0 <= value <= 1:
+                raise ValueError(f"{field} must be finite and between 0 and 1")
         if type(self.fairness) is not bool:
             raise ValueError("fairness must be a boolean")
         if (

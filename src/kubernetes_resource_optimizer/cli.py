@@ -68,6 +68,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Relative MIP gap accepted only for fairness (default: 0).",
     )
     parser.add_argument(
+        "--limits-mip-gap",
+        type=float,
+        default=0.0,
+        help="Relative MIP gap accepted for the final weighted-limit phase (default: 0).",
+    )
+    parser.add_argument(
         "--fairness",
         action="store_true",
         help="Optimize minimum normalized request-limit headroom before maximizing weighted limits (default: disabled).",
@@ -149,6 +155,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             memory_limit_overcommit=args.memory_limit_overcommit,
             limit_peak_multiplier=args.limit_peak_multiplier,
             fairness_mip_gap=args.fairness_mip_gap,
+            limits_mip_gap=args.limits_mip_gap,
             fairness=args.fairness,
         )
     except (InputValidationError, ValueError) as error:

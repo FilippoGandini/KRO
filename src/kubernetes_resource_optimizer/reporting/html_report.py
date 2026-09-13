@@ -230,6 +230,11 @@ def generate_html_report(
                 else []
             ),
             (
+                "Limits MIP gap",
+                f"{config.limits_mip_gap:.2%}",
+                "Relative optimality gap accepted in the final weighted-limit phase.",
+            ),
+            (
                 "Fairness",
                 "Enabled" if config.fairness else "Disabled",
                 "Preserve achieved minimum-headroom score before optimizing demand-weighted limits.",

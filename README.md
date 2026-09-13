@@ -31,6 +31,11 @@ HiGHS is the default solver; CBC is also available. The command prints
 recommendations and diagnostics and writes an HTML/SVG report when `--output-dir`
 is supplied. Run `uv run kro --help` for all options.
 
+Use `--limits-mip-gap 0.01` to accept a 1% relative optimality gap in the final
+weighted-limit phase. The default is `0`. Optional fairness has its independent
+`--fairness-mip-gap`; node cost always requires zero gap. Gap termination is
+reported as approximate, and a time limit alone does not complete the hierarchy.
+
 ## Documentation
 
 See the [technical documentation](docs/mathematical-formulation.tex) for the

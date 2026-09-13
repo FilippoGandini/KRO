@@ -46,6 +46,7 @@ def test_priority_and_fairness_options() -> None:
     base = ["--nodes", "n.csv", "--workloads", "w.csv", "--usage", "u.csv"]
     defaults = build_parser().parse_args(base)
     assert defaults.limit_peak_multiplier == 1.5
+    assert defaults.limits_mip_gap == 0
     assert defaults.fairness_mip_gap == 0
     assert not defaults.fairness
     selected = build_parser().parse_args(
@@ -55,10 +56,13 @@ def test_priority_and_fairness_options() -> None:
             "2",
             "--fairness-mip-gap",
             "0.05",
+            "--limits-mip-gap",
+            "0.02",
             "--fairness",
         ]
     )
     assert selected.limit_peak_multiplier == 2
+    assert selected.limits_mip_gap == 0.02
     assert selected.fairness_mip_gap == 0.05
     assert selected.fairness
     with pytest.raises(SystemExit):

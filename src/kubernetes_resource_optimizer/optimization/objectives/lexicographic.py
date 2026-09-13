@@ -22,7 +22,7 @@ def solve_lexicographic(
     solver: CbcSolver | HighsSolver,
     progress: Callable[[str], None] | None = None,
 ) -> SolverResult:
-    """Share a total time budget and accept a configured relative gap only in fairness.
+    """Share a total time budget and accept phase-specific relative gaps.
 
     Cost is locked with no intentional degradation; normalized objectives use
     the configured absolute tolerance. Solver numerical tolerances still apply.
@@ -43,7 +43,7 @@ def solve_lexicographic(
     message = ""
     last_value: float | None = None
     complete = False
-    approximate_fairness = False
+    approximate_hierarchy = False
     try:
         for index, stage in enumerate(model.stages):
             remaining = None
@@ -63,7 +63,10 @@ def solve_lexicographic(
                 )
             problem.sense = stage.sense
             problem.setObjective(stage.expression)
-            gap = model.config.fairness_mip_gap if stage.name == "fairness" else 0.0
+            gap = {
+                "fairness": model.config.fairness_mip_gap,
+                "weighted_limits": model.config.limits_mip_gap,
+            }.get(stage.name, 0.0)
             result = replace(solver, time_limit_seconds=remaining, mip_gap=gap).solve(
                 problem
             )
@@ -100,11 +103,11 @@ def solve_lexicographic(
                     variable.varValue = value
                 status = SolverStatus.FEASIBLE
             accepted_gap = (
-                stage.name == "fairness"
+                stage.name in {"fairness", "weighted_limits"}
                 and gap > 0
                 and result.status is SolverStatus.GAP_SATISFIED
             )
-            approximate_fairness |= accepted_gap
+            approximate_hierarchy |= accepted_gap
             if result.status is not SolverStatus.OPTIMAL and not accepted_gap:
                 message = f"Phase {stage.name} ended as {result.status.value}; hierarchy incomplete."
                 break
@@ -112,12 +115,12 @@ def solve_lexicographic(
                 complete = True
                 status = (
                     SolverStatus.FEASIBLE
-                    if approximate_fairness
+                    if approximate_hierarchy
                     else SolverStatus.OPTIMAL
                 )
                 message = (
-                    "Hierarchy completed; fairness accepted within its configured MIP gap; achieved score preserved."
-                    if approximate_fairness
+                    "Hierarchy completed; phase-specific MIP gap accepted; achieved fairness score preserved when enabled."
+                    if approximate_hierarchy
                     else "All lexicographic phases optimal within numerical tolerances."
                 )
                 break
