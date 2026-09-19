@@ -118,3 +118,40 @@ def test_directory_rejects_missing_resource_pair(tmp_path: Path) -> None:
 
     with pytest.raises(ConversionError, match="missing JSON pairs"):
         convert_directory(input_dir, tmp_path / "usage.csv")
+
+
+def test_writes_kro_workloads_for_observed_pods(tmp_path: Path) -> None:
+    from kubernetes_resource_optimizer.data.csv_loader import load_pods_csv
+    from kubernetes_resource_optimizer.utils.ocp_usage_to_csv import main
+
+    for pod in ("pod-b", "pod-a"):
+        for resource in ("cpu", "mem"):
+            _write_json(
+                tmp_path / f"{pod}-{resource}.json",
+                _export(pod, [[1787562000, "1"], [1787565600, "2"]]),
+            )
+    workloads = tmp_path / "workload.csv"
+    assert main([
+        "--input-dir", str(tmp_path), "--output", str(tmp_path / "usage.csv"),
+        "--workloads-output", str(workloads),
+    ]) == 0
+    pods = load_pods_csv(workloads)
+    assert [pod.pod_id for pod in pods] == ["pod-a", "pod-b"]
+    assert all(pod.service_id is None for pod in pods)
+    assert all(pod.cpu_limit_max is None for pod in pods)
+    assert all(pod.current_cpu_request is None for pod in pods)
+
+
+def test_rejects_different_histories_between_pods(tmp_path: Path) -> None:
+    for pod, timestamp in (("pod-a", 1787562000), ("pod-b", 1787565600)):
+        for resource in ("cpu", "mem"):
+            _write_json(
+                tmp_path / f"{pod}-{resource}.json", _export(pod, [[timestamp, "1"]])
+            )
+    with pytest.raises(ConversionError, match="pod histories are not aligned"):
+        convert_directory(
+            tmp_path, tmp_path / "usage.csv",
+            workloads_output=tmp_path / "workload.csv",
+        )
+    assert not (tmp_path / "usage.csv").exists()
+    assert not (tmp_path / "workload.csv").exists()

@@ -206,6 +206,9 @@ def convert_directory(
     input_dir: Path,
     output_csv: Path,
     *,
+    workloads_output: Path | None = None,
+    pod_owners: Path | None = None,
+    replicaset_owners: Path | None = None,
     cpu_unit: str = "cores",
     memory_unit: str = "bytes",
     metric_label: str = "pod",
@@ -234,6 +237,26 @@ def convert_directory(
         combined_cpu.update(cpu)
         combined_memory.update(memory)
 
+    services: dict[str, str] = {}
+    if (pod_owners is None) != (replicaset_owners is None):
+        raise ConversionError("provide both pod and ReplicaSet owner exports")
+    if pod_owners is not None and replicaset_owners is not None:
+        from kubernetes_resource_optimizer.utils.ocp_owners import resolve_services
+
+        services = resolve_services(pod_owners, replicaset_owners)
+
+    histories: dict[str, set[float]] = {}
+    for key in combined_cpu:
+        histories.setdefault(key.workload_id, set()).add(key.timestamp)
+    expected = next(iter(histories.values()))
+    if any(timestamps != expected for timestamps in histories.values()):
+        raise ConversionError("pod histories are not aligned across all workloads")
+    if workloads_output is not None and workloads_output.resolve() == output_csv.resolve():
+        raise ConversionError("usage and workload output paths must differ")
+    # Validate timestamp formatting before writing any output.
+    for timestamp in expected:
+        _format_timestamp(timestamp)
+
     output_csv.parent.mkdir(parents=True, exist_ok=True)
     try:
         with output_csv.open("w", encoding="utf-8", newline="") as stream:
@@ -252,6 +275,24 @@ def convert_directory(
                 )
     except OSError as error:
         raise ConversionError(f"cannot write {output_csv}: {error}") from error
+    if workloads_output is not None:
+        fields = (
+            "workload_id", "service_id", "current_cpu_request", "current_memory_request",
+            "current_cpu_limit", "current_memory_limit", "cpu_request_max",
+            "memory_request_max", "cpu_limit_max", "memory_limit_max",
+        )
+        try:
+            workloads_output.parent.mkdir(parents=True, exist_ok=True)
+            with workloads_output.open("w", encoding="utf-8", newline="") as stream:
+                workload_writer = csv.DictWriter(stream, fieldnames=fields)
+                workload_writer.writeheader()
+                for workload_id in sorted(histories):
+                    workload_writer.writerow({
+                        "workload_id": workload_id,
+                        "service_id": services.get(workload_id, ""),
+                    })
+        except OSError as error:
+            raise ConversionError(f"cannot write {workloads_output}: {error}") from error
     return len(combined_cpu)
 
 
@@ -266,6 +307,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--output", type=Path, default=Path("data/private/usage.csv")
+    )
+    parser.add_argument(
+        "--workloads-output", type=Path,
+        help="also write a KRO workload CSV for exactly the observed pods",
+    )
+    parser.add_argument("--pod-owners", type=Path, help="kube_pod_owner matrix JSON")
+    parser.add_argument(
+        "--replicaset-owners", type=Path, help="kube_replicaset_owner matrix JSON"
     )
     parser.add_argument(
         "--cpu-unit", choices=tuple(CPU_CONVERTERS), default="cores"
@@ -287,6 +336,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         count = convert_directory(
             args.input_dir,
             args.output,
+            workloads_output=args.workloads_output,
+            pod_owners=args.pod_owners,
+            replicaset_owners=args.replicaset_owners,
             cpu_unit=args.cpu_unit,
             memory_unit=args.memory_unit,
             metric_label=args.metric_label,

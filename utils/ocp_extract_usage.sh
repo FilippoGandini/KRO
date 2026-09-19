@@ -13,6 +13,19 @@ read -rp "Collection period (e.g. 24h, 7d, 30d): " PERIOD
 read -rp "Output directory [metrics]: " OUTPUT_DIR
 
 OUTPUT_DIR=${OUTPUT_DIR:-metrics}
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+PYTHON=${PYTHON:-python3}
+JSON_DIR="${OUTPUT_DIR}/json"
+
+command -v "$PYTHON" >/dev/null 2>&1 || {
+    echo "ERROR: Python 3.12+ is required (set PYTHON to its executable)." >&2
+    exit 1
+}
+# Avoid mixing observations from different extractions.
+if [[ -d "$JSON_DIR" ]] && [[ -n "$(find "$JSON_DIR" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
+    echo "ERROR: $JSON_DIR is not empty; choose a fresh output directory." >&2
+    exit 1
+fi
 
 read -rsp "Token: " TOKEN
 echo
@@ -127,7 +140,7 @@ PERIOD_START=$(( END - PERIOD_SECONDS ))
 START=$(( PERIOD_START + STEP ))
 
 
-mkdir -p "$OUTPUT_DIR"
+mkdir -p "$JSON_DIR"
 
 echo
 echo "Configuration"
@@ -216,9 +229,10 @@ query_thanos() {
 # ---------------------------------------------------------------------------
 # Query CPU and memory metrics
 #
-# Only two queries are sent to Thanos:
+# Four sequential read-only GET queries are sent to Thanos:
 #   1. one CPU query for the whole namespace
 #   2. one memory query for the whole namespace
+#   3-4. controller ownership histories (pod and ReplicaSet)
 # ---------------------------------------------------------------------------
 
 echo "Querying CPU metrics..."
@@ -247,6 +261,24 @@ validate_response() {
 validate_response "$CPU_TMP"
 validate_response "$MEM_TMP"
 
+# Windowed owner gauges also capture controllers that disappeared between steps.
+# These only read monitoring data; no Kubernetes write API or oc command is used.
+echo "Querying pod controller history (read-only)..."
+query_thanos \
+    "max_over_time(kube_pod_owner{namespace=\"$NAMESPACE\",owner_is_controller=\"true\"}[${STEP}s])" \
+    "${JSON_DIR}/pod-owners.json"
+validate_response "${JSON_DIR}/pod-owners.json"
+
+echo "Querying ReplicaSet controller history (read-only)..."
+query_thanos \
+    "max_over_time(kube_replicaset_owner{namespace=\"$NAMESPACE\",owner_is_controller=\"true\"}[${STEP}s])" \
+    "${JSON_DIR}/replicaset-owners.json"
+validate_response "${JSON_DIR}/replicaset-owners.json"
+
+if [[ "$(jq '.data.result | length' "${JSON_DIR}/pod-owners.json")" == 0 ]]; then
+    echo "WARNING: no pod owner metrics returned; service_id will remain empty." >&2
+fi
+
 # ---------------------------------------------------------------------------
 # Split namespace-level query results into one JSON file per pod
 #
@@ -268,10 +300,19 @@ split_results() {
         pod=$(jq -r '.metric.pod // empty' <<< "$result")
 
         if [[ -z "$pod" ]]; then
-            continue
+            echo "ERROR: metric series has no pod label." >&2
+            exit 1
         fi
 
-        output_file="${OUTPUT_DIR}/${pod}-${metric_type}.json"
+        if ! [[ "$pod" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]]; then
+            echo "ERROR: invalid pod name: $pod" >&2
+            exit 1
+        fi
+        output_file="${JSON_DIR}/${pod}-${metric_type}.json"
+        if [[ -e "$output_file" ]]; then
+            echo "ERROR: duplicate pod series: $pod ($metric_type)" >&2
+            exit 1
+        fi
 
         jq -n \
             --argjson result "$result" \
@@ -299,6 +340,15 @@ split_results "$MEM_TMP" "mem"
 # Summary
 # ---------------------------------------------------------------------------
 
+echo "Converting JSON exports to KRO inputs..."
+PYTHONPATH="${SCRIPT_DIR}/../src${PYTHONPATH:+:$PYTHONPATH}" "$PYTHON" \
+    "${SCRIPT_DIR}/ocp_usage_to_csv.py" \
+    --input-dir "$JSON_DIR" \
+    --output "${OUTPUT_DIR}/usage.csv" \
+    --workloads-output "${OUTPUT_DIR}/workload.csv" \
+    --pod-owners "${JSON_DIR}/pod-owners.json" \
+    --replicaset-owners "${JSON_DIR}/replicaset-owners.json"
+
 CPU_PODS=$(jq '.data.result | length' "$CPU_TMP")
 MEM_PODS=$(jq '.data.result | length' "$MEM_TMP")
 
@@ -308,3 +358,5 @@ echo "---------------------"
 echo "CPU pod series:     $CPU_PODS"
 echo "Memory pod series:  $MEM_PODS"
 echo "Output directory:   $OUTPUT_DIR"
+echo "Usage CSV:          ${OUTPUT_DIR}/usage.csv"
+echo "Workload CSV:       ${OUTPUT_DIR}/workload.csv"
