@@ -22,6 +22,12 @@ class WorkloadSeries:
     usage: tuple[float, ...]
     request: float
     limit: float
+    current_request: float | None = None
+    current_limit: float | None = None
+
+    def coverage(self, boundary: float) -> float:
+        """Empirical coverage with the same tolerance as solution diagnostics."""
+        return sum(value <= boundary + 1e-7 for value in self.usage) / len(self.usage)
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,6 +76,7 @@ def build_workload_series(
     for sample in data.usage_samples:
         samples_by_workload[sample.pod_id].append(sample)
 
+    pods = {pod.pod_id: pod for pod in data.pods}
     series: list[WorkloadSeries] = []
     for workload in result.workloads:
         samples = sorted(
@@ -84,6 +91,8 @@ def build_workload_series(
                 usage=tuple(_usage(sample, resource) for sample in samples),
                 request=_request(workload, resource),
                 limit=_limit(workload, resource),
+                current_request=getattr(pods[workload.workload_id], f"current_{resource.value}_request"),
+                current_limit=getattr(pods[workload.workload_id], f"current_{resource.value}_limit"),
             )
         )
     return tuple(series)

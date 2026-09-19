@@ -16,6 +16,17 @@ from kubernetes_resource_optimizer.reporting.charts import (
     save_node_chart,
     save_workload_chart,
 )
+from kubernetes_resource_optimizer.reporting.comparison import (
+    NOTE,
+    STYLES,
+    comparison_table,
+)
+from kubernetes_resource_optimizer.reporting.formatting import (
+    format_number,
+    format_percent,
+)
+from kubernetes_resource_optimizer.reporting.impact import STYLES as IMPACT_STYLES
+from kubernetes_resource_optimizer.reporting.impact import impact_section
 from kubernetes_resource_optimizer.reporting.series import (
     build_node_series,
     build_workload_series,
@@ -25,7 +36,11 @@ from kubernetes_resource_optimizer.solution.models import OptimizationResult
 
 def _format_memory(memory_mib: float, *, fixed_precision: bool = False) -> str:
     """Choose a binary memory unit independently for each table cell."""
-    precision = ".3f" if fixed_precision else "g"
+    if fixed_precision:
+        if memory_mib >= 1024:
+            return f"{format_number(memory_mib / 1024)} GiB"
+        return f"{format_number(memory_mib)} MiB"
+    precision = "g"
     if memory_mib >= 1024:
         return f"{memory_mib / 1024:{precision}} GiB"
     return f"{memory_mib:{precision}} MiB"
@@ -158,16 +173,16 @@ def generate_html_report(
             *(
                 (
                     f"Phase: {stage.name}",
-                    f"{stage.status.value}; value={stage.objective_value}; gap={stage.mip_gap}; bound={stage.best_bound}; {stage.solve_time_seconds:.3f} s",
+                    f"{stage.status.value}; value={stage.objective_value}; gap={stage.mip_gap}; bound={stage.best_bound}; {format_number(stage.solve_time_seconds)} s",
                 )
                 for stage in result.stages
             ),
-            ("Solve time", f"{result.solve_time_seconds:.3f} s"),
+            ("Solve time", f"{format_number(result.solve_time_seconds)} s"),
             (
                 "Model size",
                 (
-                    f"{result.model_variable_count:,} variables - "
-                    f"{result.model_constraint_count:,} constraints"
+                    f"{format_number(result.model_variable_count, 0)} variables - "
+                    f"{format_number(result.model_constraint_count, 0)} constraints"
                 ),
             ),
             ("Historical period", period),
@@ -181,16 +196,16 @@ def generate_html_report(
         (
             workload.workload_id,
             workload.assigned_node,
-            f"{workload.recommended_cpu_request:.3f}",
-            f"{workload.recommended_cpu_limit:.3f}",
+            f"{format_number(workload.recommended_cpu_request)}",
+            f"{format_number(workload.recommended_cpu_limit)}",
             _format_memory(workload.recommended_memory_request, fixed_precision=True),
             _format_memory(workload.recommended_memory_limit, fixed_precision=True),
             *(
-                f"{violations[workload.workload_id, resource].request_violation_rate:.2%}"
+                f"{format_percent(violations[workload.workload_id, resource].request_violation_rate, 2)}"
                 for resource in (Resource.CPU, Resource.MEMORY)
             ),
             *(
-                f"{violations[workload.workload_id, resource].limit_violation_rate:.2%}"
+                f"{format_percent(violations[workload.workload_id, resource].limit_violation_rate, 2)}"
                 for resource in (Resource.CPU, Resource.MEMORY)
             ),
         )
@@ -201,8 +216,8 @@ def generate_html_report(
         (
             "Workload",
             "Node",
-            "CPU request (cores)",
-            "CPU limit (cores)",
+            "CPU request",
+            "CPU limit",
             "Memory request",
             "Memory limit",
         ),
@@ -211,6 +226,16 @@ def generate_html_report(
             ("Limit violations", ("CPU", "Memory")),
         ),
     )
+    has_current = any(
+        item.current_request is not None or item.current_limit is not None
+        for item in (*workload_cpu, *workload_memory)
+    )
+    if has_current:
+        workload_table = comparison_table(
+            workload_cpu, workload_memory,
+            (config.epsilon_cpu_request, config.epsilon_cpu_limit,
+             config.epsilon_memory_request, config.epsilon_memory_limit),
+        )
     settings_table = _table(
         [
             (
@@ -222,7 +247,7 @@ def generate_html_report(
                 [
                     (
                         "Fairness MIP gap",
-                        f"{config.fairness_mip_gap:.2%}",
+                        f"{format_percent(config.fairness_mip_gap, 2)}",
                         "Relative optimality gap accepted only in the optional fairness phase.",
                     )
                 ]
@@ -231,7 +256,7 @@ def generate_html_report(
             ),
             (
                 "Limits MIP gap",
-                f"{config.limits_mip_gap:.2%}",
+                f"{format_percent(config.limits_mip_gap, 2)}",
                 "Relative optimality gap accepted in the final weighted-limit phase.",
             ),
             (
@@ -241,22 +266,22 @@ def generate_html_report(
             ),
             (
                 "CPU request risk tolerance",
-                f"{config.epsilon_cpu_request:.2%}",
+                f"{format_percent(config.epsilon_cpu_request, 2)}",
                 "Maximum historical CPU exceedance share. Choose conservatively: requests are calculated deterministically from coverage.",
             ),
             (
                 "Memory request risk tolerance",
-                f"{config.epsilon_memory_request:.2%}",
+                f"{format_percent(config.epsilon_memory_request, 2)}",
                 "Maximum historical memory exceedance share. Choose conservatively: requests are calculated deterministically from coverage.",
             ),
             (
                 "CPU limit risk tolerance",
-                f"{config.epsilon_cpu_limit:.2%}",
+                f"{format_percent(config.epsilon_cpu_limit, 2)}",
                 "Maximum share of historical scenarios in which CPU usage may exceed the recommended limit.",
             ),
             (
                 "Memory limit risk tolerance",
-                f"{config.epsilon_memory_limit:.2%}",
+                f"{format_percent(config.epsilon_memory_limit, 2)}",
                 "Maximum share of historical scenarios in which memory usage may exceed the recommended limit.",
             ),
             (
@@ -294,14 +319,14 @@ def generate_html_report(
             ratio = peak / series.capacity
             remaining = series.capacity - peak
             margin = (
-                f"{remaining:.3f} cores"
+                f"{format_number(remaining)} cores"
                 if series.resource is Resource.CPU
                 else _format_memory(remaining)
             )
             alert = " alert" if ratio > 1 + 1e-7 else ""
             bars.append(
                 f'<div class="node-bar{alert}"><span>{series.resource.value.upper()}: '
-                f'{ratio:.1%} · Remaining: {margin}</span>'
+                f'{format_percent(ratio, 1)} · Remaining: {margin}</span>'
                 f'<div class="bar-track"><div class="bar-fill" '
                 f'style="width:{min(100, max(0, ratio * 100)):.4f}%"></div></div></div>'
             )
@@ -319,9 +344,10 @@ def generate_html_report(
         f'<section><h3>{html.escape(identifier)}</h3><img src="{html.escape(path)}" alt="Workload {html.escape(identifier)} usage chart"></section>'
         for identifier, path in workload_images
     )
+    report_title = html.escape(f"KRO Report: {output_directory.resolve().name}")
     document = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kubernetes Resource Optimizer report</title>
+<title>{report_title}</title>
 <style>
 body{{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;max-width:1500px;margin:auto;padding:2rem;color:#263238;background:#f5f5f5}}
 h1,h2,h3{{color:#102A43}} section{{background:white;padding:1rem 1.25rem;margin:1rem 0;border:1px solid #dfe3e6;border-radius:8px}}
@@ -336,21 +362,38 @@ img{{display:block;max-width:100%;height:auto;margin:auto}} .note{{padding:.8rem
 .table-scroll{{max-height:650px;overflow:auto}} #recommendations table{{margin:0}} #recommendations thead{{position:sticky;top:0;z-index:1;background:#eef3f7}}
 #recommendations td{{text-align:right;font-variant-numeric:tabular-nums}} #recommendations td:nth-child(-n+2){{text-align:left}}
 #recommendations th button{{font:inherit;font-weight:600;color:inherit;border:0;background:transparent;cursor:pointer;width:100%}}
+.chart-tabs{{display:flex;gap:.25rem;margin-top:1.25rem;border-bottom:2px solid #dfe3e6}}
+.chart-tabs button{{flex:1;padding:.8rem 1rem;font:inherit;font-weight:600;border:0;border-radius:6px 6px 0 0;background:#e8edf2;color:#52616b;cursor:pointer}}
+.chart-tabs button[aria-selected="true"]{{background:#1565C0;color:white}}
+.chart-tabs button:focus-visible{{outline:3px solid #102A43;outline-offset:2px}}
+.chart-panel[hidden]{{display:none}}
+@media print{{.chart-tabs{{display:none}}.chart-panel[hidden]{{display:block}}}}
 @media(max-width:900px){{.selected-nodes{{grid-template-columns:1fr}}}}
 @media(max-width:500px){{.node-resources{{grid-template-columns:1fr;gap:.5rem}}}}
+{STYLES + IMPACT_STYLES if has_current else ""}
 </style></head><body>
-<h1>Kubernetes Resource Optimizer report</h1>
-<p class="note">Effective node demand is computed as <code>max(historical usage, recommended request)</code> for each placed workload. SVG files are portable and can be opened independently.</p>
+<h1>{report_title}</h1>
 <h2>Summary</h2>{summary}
 <h2>Optimization settings</h2>{settings_table}
 <h2>Selected nodes</h2><div class="selected-nodes"><div>{selected_nodes_table}</div>{node_comparison}</div>
+<p class="note">Effective node demand is computed as <code>max(historical usage, recommended request)</code> for each placed workload. SVG files are portable and can be opened independently.</p>
 <h2>Recommendations</h2>
+{NOTE if has_current else ""}
 <div class="table-controls"><label>Workload <input id="workload-search" type="search" placeholder="Search workload"></label>
 <label>Node <select id="node-filter"><option value="">All nodes</option>{node_options}</select></label>
 <span id="row-count" role="status"></span></div>
 <div id="recommendations" class="table-scroll">{workload_table}</div>
-<h2>Active node allocation</h2>{node_sections}
-<h2>Workload usage and boundaries</h2>{workload_sections}
+{impact_section(data, result, config, workload_cpu, workload_memory) if has_current else ""}
+<div class="chart-tabs" role="tablist" aria-label="Allocation charts">
+<button type="button" id="nodes-tab" role="tab" aria-selected="true" aria-controls="nodes-panel" tabindex="0">Nodes</button>
+<button type="button" id="workloads-tab" role="tab" aria-selected="false" aria-controls="workloads-panel" tabindex="-1">Workloads</button>
+</div>
+<div class="chart-panel" id="nodes-panel" role="tabpanel" aria-labelledby="nodes-tab" tabindex="0">
+<h2>Active node allocation</h2>{node_sections}</div>
+<div class="chart-panel" id="workloads-panel" role="tabpanel" aria-labelledby="workloads-tab" tabindex="0" hidden>
+<h2>Workload usage and boundaries</h2>{workload_sections}</div>
+<noscript><style>.chart-tabs{{display:none}}.chart-panel[hidden]{{display:block}}</style></noscript>
+{_CHART_TABS_SCRIPT}
 {_TABLE_SCRIPT}
 </body></html>"""
     index = output_directory / "index.html"
@@ -358,7 +401,7 @@ img{{display:block;max-width:100%;height:auto;margin:auto}} .note{{padding:.8rem
     return index
 
 
-_TABLE_SCRIPT = """<script>
+_TABLE_SCRIPT = r"""<script>
 (() => {
   const table = document.querySelector('#recommendations table');
   const rows = Array.from(table.tBodies[0].rows);
@@ -393,8 +436,9 @@ _TABLE_SCRIPT = """<script>
       heading.setAttribute('aria-sort', ascending ? 'ascending' : 'descending');
       button.textContent = label + (ascending ? ' ↑' : ' ↓');
       const value = row => {
+        if (row.cells[column].dataset.sort !== undefined) return Number(row.cells[column].dataset.sort);
         const text = row.cells[column].textContent;
-        return column < 2 ? text : parseFloat(text) * (text.includes('GiB') ? 1024 : 1);
+        return column < 2 ? text : parseFloat(text.replace(/\s/g, '')) * (text.includes('GiB') ? 1024 : 1);
       };
       rows.sort((a, b) => {
         const x = value(a), y = value(b);
@@ -405,5 +449,34 @@ _TABLE_SCRIPT = """<script>
     });
   });
   update();
+})();
+</script>"""
+
+
+_CHART_TABS_SCRIPT = """<script>
+(() => {
+  const tabs = Array.from(document.querySelectorAll('.chart-tabs [role="tab"]'));
+  const activate = selected => {
+    tabs.forEach(tab => {
+      const active = tab === selected;
+      tab.setAttribute('aria-selected', String(active));
+      tab.tabIndex = active ? 0 : -1;
+      document.getElementById(tab.getAttribute('aria-controls')).hidden = !active;
+    });
+  };
+  tabs.forEach((tab, index) => {
+    tab.addEventListener('click', () => activate(tab));
+    tab.addEventListener('keydown', event => {
+      let next;
+      if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+      else if (event.key === 'ArrowLeft') next = (index + tabs.length - 1) % tabs.length;
+      else if (event.key === 'Home') next = 0;
+      else if (event.key === 'End') next = tabs.length - 1;
+      else return;
+      event.preventDefault();
+      activate(tabs[next]);
+      tabs[next].focus();
+    });
+  });
 })();
 </script>"""

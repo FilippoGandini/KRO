@@ -28,3 +28,13 @@ def test_node_series_uses_maximum_of_usage_and_request(
     assert series[0].aggregate_request == 3.0
     assert series[0].aggregate_limit == 4.5
     assert series[0].limit_boundary == 8.0
+
+
+def test_coverage_includes_ties_and_numeric_tolerance() -> None:
+    from kubernetes_resource_optimizer.reporting.series import WorkloadSeries
+
+    series = WorkloadSeries("pod", "node", Resource.CPU, (),
+                            (0.0, 1.0, 1.0 + 5e-8, 1.0 + 2e-7), 1.0, 2.0)
+    assert series.coverage(1.0) == 0.75
+    assert series.coverage(0.0) == 0.25
+    assert series.coverage(2.0) == 1.0

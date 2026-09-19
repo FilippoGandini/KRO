@@ -207,6 +207,7 @@ def convert_directory(
     output_csv: Path,
     *,
     workloads_output: Path | None = None,
+    current_resources: Path | None = None,
     pod_owners: Path | None = None,
     replicaset_owners: Path | None = None,
     cpu_unit: str = "cores",
@@ -237,6 +238,13 @@ def convert_directory(
         combined_cpu.update(cpu)
         combined_memory.update(memory)
 
+    current: dict[str, dict[str, float]] = {}
+    if current_resources is not None:
+        from kubernetes_resource_optimizer.utils.ocp_current import (
+            load_current_resources,
+        )
+
+        current = load_current_resources(current_resources)
     services: dict[str, str] = {}
     if (pod_owners is None) != (replicaset_owners is None):
         raise ConversionError("provide both pod and ReplicaSet owner exports")
@@ -290,6 +298,8 @@ def convert_directory(
                     workload_writer.writerow({
                         "workload_id": workload_id,
                         "service_id": services.get(workload_id, ""),
+                        **{field: _format_number(value)
+                           for field, value in current.get(workload_id, {}).items()},
                     })
         except OSError as error:
             raise ConversionError(f"cannot write {workloads_output}: {error}") from error
@@ -311,6 +321,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--workloads-output", type=Path,
         help="also write a KRO workload CSV for exactly the observed pods",
+    )
+    parser.add_argument(
+        "--current-resources", type=Path,
+        help="instant vector of container info, resource requests and limits",
     )
     parser.add_argument("--pod-owners", type=Path, help="kube_pod_owner matrix JSON")
     parser.add_argument(
@@ -337,6 +351,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.input_dir,
             args.output,
             workloads_output=args.workloads_output,
+            current_resources=args.current_resources,
             pod_owners=args.pod_owners,
             replicaset_owners=args.replicaset_owners,
             cpu_unit=args.cpu_unit,

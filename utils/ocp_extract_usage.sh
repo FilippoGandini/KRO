@@ -229,10 +229,11 @@ query_thanos() {
 # ---------------------------------------------------------------------------
 # Query CPU and memory metrics
 #
-# Four sequential read-only GET queries are sent to Thanos:
+# Five sequential read-only GET queries are sent to Thanos:
 #   1. one CPU query for the whole namespace
 #   2. one memory query for the whole namespace
 #   3-4. controller ownership histories (pod and ReplicaSet)
+#   5. current container inventory, requests and limits (instant snapshot)
 # ---------------------------------------------------------------------------
 
 echo "Querying CPU metrics..."
@@ -278,6 +279,17 @@ validate_response "${JSON_DIR}/replicaset-owners.json"
 if [[ "$(jq '.data.result | length' "${JSON_DIR}/pod-owners.json")" == 0 ]]; then
     echo "WARNING: no pod owner metrics returned; service_id will remain empty." >&2
 fi
+
+# One instant query at collection time, not a historical maximum of allocations.
+# Include container info so partially specified pod totals can remain unknown.
+echo "Querying current requests and limits (read-only)..."
+curl -k -sS --fail-with-body -G \
+    -H "Authorization: Bearer $TOKEN" \
+    "https://${THANOS_HOST}/api/v1/query" \
+    --data-urlencode "query={__name__=~\"kube_pod_container_(info|resource_requests|resource_limits)\",namespace=\"$NAMESPACE\"}" \
+    --data-urlencode "time=${NOW}" \
+    > "${JSON_DIR}/current-resources.json"
+validate_response "${JSON_DIR}/current-resources.json"
 
 # ---------------------------------------------------------------------------
 # Split namespace-level query results into one JSON file per pod
@@ -346,6 +358,7 @@ PYTHONPATH="${SCRIPT_DIR}/../src${PYTHONPATH:+:$PYTHONPATH}" "$PYTHON" \
     --input-dir "$JSON_DIR" \
     --output "${OUTPUT_DIR}/usage.csv" \
     --workloads-output "${OUTPUT_DIR}/workload.csv" \
+    --current-resources "${JSON_DIR}/current-resources.json" \
     --pod-owners "${JSON_DIR}/pod-owners.json" \
     --replicaset-owners "${JSON_DIR}/replicaset-owners.json"
 

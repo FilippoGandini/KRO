@@ -9,8 +9,10 @@ matplotlib.use("Agg")
 
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
+from matplotlib.ticker import StrMethodFormatter
 
 from kubernetes_resource_optimizer.data.models import Resource
+from kubernetes_resource_optimizer.reporting.formatting import format_percent
 from kubernetes_resource_optimizer.reporting.series import (
     NodeSeries,
     WorkloadSeries,
@@ -92,6 +94,7 @@ def save_node_chart(cpu: NodeSeries, memory: NodeSeries, destination: Path) -> N
         )
         axis.set_title(f"{series.resource.value.upper()} allocation")
         axis.set_ylabel(_unit(series.resource))
+        axis.yaxis.set_major_formatter(StrMethodFormatter("{x:g}"))
         axis.set_ylim(bottom=0)
         axis.grid(axis="y", alpha=0.25)
         _configure_scenario_axis(axis, series.timestamps)
@@ -117,19 +120,31 @@ def save_workload_chart(
             markersize=3,
             label="Usage",
         )
+        comparison = series.current_request is not None or series.current_limit is not None
+        for boundary, label, color, style in (
+            (series.current_request, "Current request", "#64A5E8", "--"),
+            (series.current_limit, "Current limit", "#B47ACF", ":"),
+        ):
+            if boundary is not None:
+                axis.axhline(
+                    boundary, color=color, linestyle=style, linewidth=2.6,
+                    label=f"{label} ({format_percent(series.coverage(boundary), 1)} coverage)",
+                )
         axis.axhline(
             series.request,
             color="#1565C0",
-            linestyle="--",
+            linestyle="-" if comparison else "--",
             linewidth=1.8,
-            label="Recommended request",
+            label=(f"Recommended request ({format_percent(series.coverage(series.request), 1)} coverage)"
+                   if comparison else "Recommended request"),
         )
         axis.axhline(
             series.limit,
             color="#6A1B9A",
-            linestyle=":",
+            linestyle="-",
             linewidth=2,
-            label="Recommended limit",
+            label=(f"Recommended limit ({format_percent(series.coverage(series.limit), 1)} coverage)"
+                   if comparison else "Recommended limit"),
         )
         request_x = [
             index
@@ -148,7 +163,7 @@ def save_workload_chart(
                 color="#EF6C00",
                 s=30,
                 zorder=3,
-                label="Request violation",
+                label="Recommended request violation" if comparison else "Request violation",
             )
         if limit_x:
             axis.scatter(
@@ -158,10 +173,11 @@ def save_workload_chart(
                 marker="x",
                 s=55,
                 zorder=4,
-                label="Limit violation",
+                label="Recommended limit violation" if comparison else "Limit violation",
             )
         axis.set_title(series.resource.value.upper())
         axis.set_ylabel(_unit(series.resource))
+        axis.yaxis.set_major_formatter(StrMethodFormatter("{x:g}"))
         axis.set_ylim(bottom=0)
         axis.grid(axis="y", alpha=0.25)
         _configure_scenario_axis(axis, series.timestamps)
