@@ -40,7 +40,7 @@ def make_data(*, node_count: int = 1, pod_count: int = 1) -> InputData:
 
 
 def config(cpu: float, memory: float) -> OptimizationConfig:
-    return OptimizationConfig(0, 0, 0, 0, cpu, memory, limit_peak_multiplier=10)
+    return OptimizationConfig(0, 0, 0, 0, cpu, memory, cpu_limit_peak_multiplier=10, memory_limit_peak_multiplier=10)
 
 
 def solve(built: OptimizationModel) -> SolverStatus:

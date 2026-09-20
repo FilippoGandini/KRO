@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import pulp
 
-from kubernetes_resource_optimizer.data.models import InputData
+from kubernetes_resource_optimizer.data.models import InputData, Resource
 from kubernetes_resource_optimizer.optimization.bounds import (
     BoundKey,
     DerivedBounds,
@@ -63,7 +63,10 @@ def build_model(
     history = derive_history_parameters(data, config)
     requests = history.requests
     effective_service_bounds = resolve_bounds(
-        data, history.peaks, config.limit_peak_multiplier, bounds
+        data,
+        history.peaks,
+        {resource: config.limit_peak_multiplier(resource) for resource in Resource},
+        bounds,
     ).effective_service
     priorities = derive_limit_priorities(history)
     problem = pulp.LpProblem("kubernetes_resource_optimizer", pulp.LpMinimize)

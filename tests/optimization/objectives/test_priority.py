@@ -98,9 +98,10 @@ def test_missing_service_does_not_collide_with_pod_id() -> None:
 
 
 @pytest.mark.parametrize("multiplier", [0, 0.9, float("inf"), float("nan")])
-def test_invalid_peak_multiplier_rejected(multiplier: float) -> None:
-    with pytest.raises(ValueError, match="limit_peak_multiplier"):
-        replace(CONFIG, limit_peak_multiplier=multiplier)
+@pytest.mark.parametrize("field", ["cpu_limit_peak_multiplier", "memory_limit_peak_multiplier"])
+def test_invalid_peak_multiplier_rejected(multiplier: float, field: str) -> None:
+    with pytest.raises(ValueError, match=field):
+        replace(CONFIG, **{field: multiplier})
 
 
 @pytest.mark.parametrize("gap", [-0.1, 1.1, float("inf"), float("nan")])

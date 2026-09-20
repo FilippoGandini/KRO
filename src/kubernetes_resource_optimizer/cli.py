@@ -55,12 +55,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--epsilon-memory-limit", type=float, default=0.01)
     parser.add_argument("--cpu-limit-overcommit", type=float, default=1.5)
     parser.add_argument("--memory-limit-overcommit", type=float, default=1.25)
-    parser.add_argument(
-        "--limit-peak-multiplier",
-        type=float,
-        default=1.5,
-        help="Individual candidate cap multiplier; replicas share their maximum cap (default: 1.5).",
-    )
+    for resource in ("cpu", "memory"):
+        parser.add_argument(
+            f"--{resource}-limit-peak-multiplier",
+            type=float,
+            default=1.5,
+            help=f"{resource.upper()} candidate cap multiplier; replicas share their maximum cap (default: 1.5).",
+        )
     parser.add_argument(
         "--fairness-mip-gap",
         type=float,
@@ -153,7 +154,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             epsilon_memory_limit=args.epsilon_memory_limit,
             cpu_limit_overcommit=args.cpu_limit_overcommit,
             memory_limit_overcommit=args.memory_limit_overcommit,
-            limit_peak_multiplier=args.limit_peak_multiplier,
+            cpu_limit_peak_multiplier=args.cpu_limit_peak_multiplier,
+            memory_limit_peak_multiplier=args.memory_limit_peak_multiplier,
             fairness_mip_gap=args.fairness_mip_gap,
             limits_mip_gap=args.limits_mip_gap,
             fairness=args.fairness,

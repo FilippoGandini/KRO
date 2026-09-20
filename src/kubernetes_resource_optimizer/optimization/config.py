@@ -9,7 +9,7 @@ from kubernetes_resource_optimizer.optimization.bounds import maximum_violation_
 
 @dataclass(frozen=True, slots=True)
 class OptimizationConfig:
-    """Independent coverage tolerances, burst cap, and phase-specific MIP gaps."""
+    """Independent coverage tolerances, burst caps, and phase-specific MIP gaps."""
 
     epsilon_cpu_request: float
     epsilon_memory_request: float
@@ -18,18 +18,18 @@ class OptimizationConfig:
     cpu_limit_overcommit: float
     memory_limit_overcommit: float
 
-    limit_peak_multiplier: float = 1.5
+    cpu_limit_peak_multiplier: float = 1.5
+    memory_limit_peak_multiplier: float = 1.5
     fairness_mip_gap: float = 0.0
     fairness: bool = False
     lexicographic_tolerance: float = 1e-9
     limits_mip_gap: float = 0.0
 
     def __post_init__(self) -> None:
-        if (
-            not math.isfinite(self.limit_peak_multiplier)
-            or self.limit_peak_multiplier < 1
-        ):
-            raise ValueError("limit_peak_multiplier must be finite and at least 1")
+        for field in ("cpu_limit_peak_multiplier", "memory_limit_peak_multiplier"):
+            value = getattr(self, field)
+            if not math.isfinite(value) or value < 1:
+                raise ValueError(f"{field} must be finite and at least 1")
         for field in ("fairness_mip_gap", "limits_mip_gap"):
             value = getattr(self, field)
             if not math.isfinite(value) or not 0 <= value <= 1:
@@ -71,6 +71,12 @@ class OptimizationConfig:
         if resource is Resource.CPU:
             return self.epsilon_cpu_limit
         return self.epsilon_memory_limit
+
+    def limit_peak_multiplier(self, resource: Resource) -> float:
+        """Return alpha[h] for ``resource``."""
+        if resource is Resource.CPU:
+            return self.cpu_limit_peak_multiplier
+        return self.memory_limit_peak_multiplier
 
     def limit_overcommit(self, resource: Resource) -> float:
         """Return K_limit[h] for ``resource``."""

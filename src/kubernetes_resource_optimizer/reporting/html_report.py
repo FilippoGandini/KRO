@@ -239,9 +239,14 @@ def generate_html_report(
     settings_table = _table(
         [
             (
-                "Limit peak multiplier",
-                str(config.limit_peak_multiplier),
-                "Hard limit cap relative to each pod historical maximum.",
+                "CPU limit peak multiplier",
+                str(config.cpu_limit_peak_multiplier),
+                "CPU candidate cap multiplier; replicas share the maximum cap.",
+            ),
+            (
+                "Memory limit peak multiplier",
+                str(config.memory_limit_peak_multiplier),
+                "Memory candidate cap multiplier; replicas share the maximum cap.",
             ),
             *(
                 [

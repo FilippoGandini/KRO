@@ -45,15 +45,18 @@ def test_cli_defaults_to_highs_with_an_unlimited_runtime() -> None:
 def test_priority_and_fairness_options() -> None:
     base = ["--nodes", "n.csv", "--workloads", "w.csv", "--usage", "u.csv"]
     defaults = build_parser().parse_args(base)
-    assert defaults.limit_peak_multiplier == 1.5
+    assert defaults.cpu_limit_peak_multiplier == 1.5
+    assert defaults.memory_limit_peak_multiplier == 1.5
     assert defaults.limits_mip_gap == 0
     assert defaults.fairness_mip_gap == 0
     assert not defaults.fairness
     selected = build_parser().parse_args(
         [
             *base,
-            "--limit-peak-multiplier",
+            "--cpu-limit-peak-multiplier",
             "2",
+            "--memory-limit-peak-multiplier",
+            "1.2",
             "--fairness-mip-gap",
             "0.05",
             "--limits-mip-gap",
@@ -61,12 +64,13 @@ def test_priority_and_fairness_options() -> None:
             "--fairness",
         ]
     )
-    assert selected.limit_peak_multiplier == 2
+    assert selected.cpu_limit_peak_multiplier == 2
+    assert selected.memory_limit_peak_multiplier == 1.2
     assert selected.limits_mip_gap == 0.02
     assert selected.fairness_mip_gap == 0.05
     assert selected.fairness
     with pytest.raises(SystemExit):
-        build_parser().parse_args([*base, "--limit-peak-multiplier", "invalid"])
+        build_parser().parse_args([*base, "--cpu-limit-peak-multiplier", "invalid"])
 
 
 def test_cli_prints_infeasibility_diagnostics(

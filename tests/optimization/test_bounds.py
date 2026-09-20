@@ -107,6 +107,6 @@ def test_historical_cap_uses_peak_independently_of_big_m() -> None:
     modified = replace(
         bounds, limit_big_m={key: value * 2 for key, value in peaks.items()}
     )
-    capped = apply_historical_limit_caps(modified, peaks, 1.5)
+    capped = apply_historical_limit_caps(modified, peaks, {r: 1.5 for r in Resource})
     assert capped.limit_upper["default", Resource.CPU] == 3.75
     assert capped.limit_big_m["default", Resource.CPU] == 5

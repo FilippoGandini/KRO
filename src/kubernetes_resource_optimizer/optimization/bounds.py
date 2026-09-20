@@ -1,6 +1,7 @@
 """Deterministic derivation of finite MILP bounds and Big-M parameters."""
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from decimal import ROUND_FLOOR, Decimal
 
@@ -143,14 +144,20 @@ def derive_bounds(
 
 
 def apply_historical_limit_caps(
-    bounds: DerivedBounds, peaks: dict[BoundKey, float], multiplier: float
+    bounds: DerivedBounds,
+    peaks: dict[BoundKey, float],
+    multipliers: Mapping[Resource, float],
 ) -> DerivedBounds:
     """Derive individual candidate caps; these are not final service bounds."""
-    if not math.isfinite(multiplier) or multiplier < 1:
-        raise ValueError("limit_peak_multiplier must be finite and at least 1")
+    for resource in Resource:
+        multiplier = multipliers[resource]
+        if not math.isfinite(multiplier) or multiplier < 1:
+            raise ValueError(
+                f"{resource.value}_limit_peak_multiplier must be finite and at least 1"
+            )
     capped = {}
     for key, upper in bounds.limit_upper.items():
-        peak_cap = multiplier * _validate_bound(peaks[key], "historical peak")
+        peak_cap = multipliers[key[1]] * _validate_bound(peaks[key], "historical peak")
         _validate_bound(peak_cap, f"historical limit cap for {key}")
         capped[key] = min(upper, peak_cap)
     return replace(bounds, limit_upper=capped)
@@ -179,11 +186,11 @@ class ResolvedBounds:
 def resolve_bounds(
     data: InputData,
     peaks: dict[BoundKey, float],
-    multiplier: float,
+    multipliers: Mapping[Resource, float],
     bounds: DerivedBounds | None = None,
 ) -> ResolvedBounds:
     """Single cap derivation pipeline for model assembly and input diagnostics."""
     base = bounds if bounds is not None else derive_bounds(data, peaks)
-    individual_candidates = apply_historical_limit_caps(base, peaks, multiplier)
+    individual_candidates = apply_historical_limit_caps(base, peaks, multipliers)
     effective_service = share_service_limit_caps(data, individual_candidates)
     return ResolvedBounds(base, individual_candidates, effective_service)

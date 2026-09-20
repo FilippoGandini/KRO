@@ -108,7 +108,7 @@ def test_custom_bounds_match_diagnostics_without_mutating_candidates() -> None:
     history = derive_history_parameters(data, config)
     base = derive_bounds(data, history.peaks)
     base.limit_upper["b", Resource.CPU] = 5
-    resolved = resolve_bounds(data, history.peaks, 1.5, base)
+    resolved = resolve_bounds(data, history.peaks, {r: 1.5 for r in Resource}, base)
     assert base.limit_upper["a", Resource.CPU] == 20
     assert resolved.individual_candidates.limit_upper["a", Resource.CPU] == 1.5
     assert resolved.effective_service.limit_upper["a", Resource.CPU] == 5

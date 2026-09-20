@@ -27,7 +27,12 @@ def feasibility_diagnostics(
     """
     yield "Feasibility diagnostics (CPU cores; memory MiB; input-only checks):"
     history = derive_history_parameters(data, config)
-    resolved = resolve_bounds(data, history.peaks, config.limit_peak_multiplier, bounds)
+    resolved = resolve_bounds(
+        data,
+        history.peaks,
+        {resource: config.limit_peak_multiplier(resource) for resource in Resource},
+        bounds,
+    )
     base = resolved.base
     individual_candidate_caps = resolved.individual_candidates.limit_upper
     effective_service_caps = resolved.effective_service.limit_upper
@@ -69,7 +74,7 @@ def feasibility_diagnostics(
                 f"request_rank={rank}/{len(values)} individual_floor={values[rank - 1] if rank else 0:g} "
                 f"request={history.requests[key]:g} request_upper={base.request_upper[key]:g} "
                 f"peak={history.peaks[key]:g} limit_bound={base.limit_upper[key]:g} "
-                f"peak_multiplier={config.limit_peak_multiplier:g} candidate_cap={individual_candidate_caps[key]:g} "
+                f"peak_multiplier={config.limit_peak_multiplier(resource):g} candidate_cap={individual_candidate_caps[key]:g} "
                 f"shared_cap={effective_service_caps[key]:g} minimum_limit={lower[key]:g} "
                 f"limit_coverage_at_shared_cap={covered}/{len(values)} required={required}; "
                 + ("CONFLICT: " + "; ".join(flags) if flags else "OK")

@@ -40,20 +40,20 @@ def source() -> InputData:
 
 
 @pytest.mark.parametrize("solver_type", [HighsSolver, CbcSolver])
-@pytest.mark.parametrize("multiplier", [1, 1.5, 2])
-def test_reward_reaches_configured_hard_cap(solver_type, multiplier) -> None:
-    model = build_model(source(), replace(CONFIG, limit_peak_multiplier=multiplier))
+@pytest.mark.parametrize("cpu_multiplier,memory_multiplier", [(1, 1.5), (1.5, 2), (2, 1)])
+def test_reward_reaches_configured_hard_cap(solver_type, cpu_multiplier, memory_multiplier) -> None:
+    model = build_model(source(), replace(CONFIG, cpu_limit_peak_multiplier=cpu_multiplier, memory_limit_peak_multiplier=memory_multiplier))
     result = solve_lexicographic(model, solver_type())
     assert result.status is SolverStatus.OPTIMAL
     assert model.requests["p", Resource.CPU] == 1
     assert model.variables.limit["p", Resource.CPU].varValue == pytest.approx(
-        4 * multiplier
+        4 * cpu_multiplier
     )
     assert model.variables.limit["p", Resource.MEMORY].varValue == pytest.approx(
-        400 * multiplier
+        400 * memory_multiplier
     )
     model.problem.addConstraint(
-        model.variables.limit["p", Resource.CPU] >= 4 * multiplier + 0.1
+        model.variables.limit["p", Resource.CPU] >= 4 * cpu_multiplier + 0.1
     )
     assert solver_type().solve(model.problem).status is SolverStatus.INFEASIBLE
 
