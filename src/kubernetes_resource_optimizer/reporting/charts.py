@@ -1,6 +1,7 @@
 """Matplotlib chart generation with a headless, cross-platform backend."""
 
 from datetime import UTC, datetime
+from io import BytesIO
 from pathlib import Path
 
 import matplotlib
@@ -51,7 +52,7 @@ def _configure_scenario_axis(axis: plt.Axes, timestamps: tuple[datetime, ...]) -
     axis.set_xlabel("Time (UTC)")
 
 
-def save_node_chart(cpu: NodeSeries, memory: NodeSeries, destination: Path) -> None:
+def save_node_chart(cpu: NodeSeries, memory: NodeSeries, destination: Path | BytesIO) -> None:
     """Save one two-panel active-node allocation chart as SVG."""
 
     figure, axes = plt.subplots(2, 1, figsize=(12, 9), constrained_layout=True)
@@ -105,7 +106,7 @@ def save_node_chart(cpu: NodeSeries, memory: NodeSeries, destination: Path) -> N
 
 
 def save_workload_chart(
-    cpu: WorkloadSeries, memory: WorkloadSeries, destination: Path
+    cpu: WorkloadSeries, memory: WorkloadSeries, destination: Path | BytesIO
 ) -> None:
     """Save one two-panel workload usage/request/limit chart as SVG."""
 

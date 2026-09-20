@@ -1,12 +1,12 @@
-"""Generation of a self-contained static HTML index and SVG charts."""
+"""Generation of a self-contained static HTML report with embedded charts."""
 
 from __future__ import annotations
 
-import hashlib
+import base64
 import html
-import re
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
+from io import BytesIO
 from itertools import pairwise
 from pathlib import Path
 
@@ -46,10 +46,10 @@ def _format_memory(memory_mib: float, *, fixed_precision: bool = False) -> str:
     return f"{memory_mib:{precision}} MiB"
 
 
-def _filename(identifier: str) -> str:
-    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", identifier).strip("-.") or "item"
-    digest = hashlib.sha256(identifier.encode()).hexdigest()[:8]
-    return f"{slug}-{digest}.svg"
+def _svg_data_uri(buffer: BytesIO) -> str:
+    """Embed a chart so the report can be shared without companion files."""
+    encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+    return f"data:image/svg+xml;base64,{encoded}"
 
 
 def _table(
@@ -127,14 +127,9 @@ def generate_html_report(
     config: OptimizationConfig,
     output_directory: Path,
 ) -> Path:
-    """Generate SVG charts plus an HTML report and return the index path."""
+    """Generate only standalone HTML, named after the output directory and local date."""
 
     output_directory.mkdir(parents=True, exist_ok=True)
-    node_directory = output_directory / "nodes"
-    workload_directory = output_directory / "workloads"
-    node_directory.mkdir(exist_ok=True)
-    workload_directory.mkdir(exist_ok=True)
-
     node_cpu = build_node_series(
         data, result, Resource.CPU, config.cpu_limit_overcommit
     )
@@ -143,9 +138,9 @@ def generate_html_report(
     )
     node_images: list[tuple[str, str]] = []
     for node_cpu_item, node_memory_item in zip(node_cpu, node_memory, strict=True):
-        filename = _filename(node_cpu_item.node_id)
-        save_node_chart(node_cpu_item, node_memory_item, node_directory / filename)
-        node_images.append((node_cpu_item.node_id, f"nodes/{filename}"))
+        with BytesIO() as buffer:
+            save_node_chart(node_cpu_item, node_memory_item, buffer)
+            node_images.append((node_cpu_item.node_id, _svg_data_uri(buffer)))
 
     workload_cpu = build_workload_series(data, result, Resource.CPU)
     workload_memory = build_workload_series(data, result, Resource.MEMORY)
@@ -153,11 +148,9 @@ def generate_html_report(
     for workload_cpu_item, workload_memory_item in zip(
         workload_cpu, workload_memory, strict=True
     ):
-        filename = _filename(workload_cpu_item.workload_id)
-        save_workload_chart(
-            workload_cpu_item, workload_memory_item, workload_directory / filename
-        )
-        workload_images.append((workload_cpu_item.workload_id, f"workloads/{filename}"))
+        with BytesIO() as buffer:
+            save_workload_chart(workload_cpu_item, workload_memory_item, buffer)
+            workload_images.append((workload_cpu_item.workload_id, _svg_data_uri(buffer)))
 
     timestamps = sorted({sample.timestamp for sample in data.usage_samples})
     period = _historical_period(timestamps)
@@ -216,8 +209,8 @@ def generate_html_report(
         (
             "Workload",
             "Node",
-            "CPU request",
-            "CPU limit",
+            "CPU request (cores)",
+            "CPU limit (cores)",
             "Memory request",
             "Memory limit",
         ),
@@ -381,7 +374,7 @@ img{{display:block;max-width:100%;height:auto;margin:auto}} .note{{padding:.8rem
 <h2>Summary</h2>{summary}
 <h2>Optimization settings</h2>{settings_table}
 <h2>Selected nodes</h2><div class="selected-nodes"><div>{selected_nodes_table}</div>{node_comparison}</div>
-<p class="note">Effective node demand is computed as <code>max(historical usage, recommended request)</code> for each placed workload. SVG files are portable and can be opened independently.</p>
+<p class="note">Effective node demand is computed as <code>max(historical usage, recommended request)</code> for each placed workload. All charts are embedded: share this HTML file alone to view the complete report offline.</p>
 <h2>Recommendations</h2>
 {NOTE if has_current else ""}
 <div class="table-controls"><label>Workload <input id="workload-search" type="search" placeholder="Search workload"></label>
@@ -401,7 +394,8 @@ img{{display:block;max-width:100%;height:auto;margin:auto}} .note{{padding:.8rem
 {_CHART_TABS_SCRIPT}
 {_TABLE_SCRIPT}
 </body></html>"""
-    index = output_directory / "index.html"
+    current_date = datetime.now(UTC).astimezone().date()
+    index = output_directory / f"{output_directory.resolve().name}_{current_date:%Y%m%d}.html"
     index.write_text(document, encoding="utf-8")
     return index
 

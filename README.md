@@ -28,8 +28,12 @@ uv run kro \
 ```
 
 HiGHS is the default solver; CBC is also available. The command prints
-recommendations and diagnostics and writes an HTML/SVG report when `--output-dir`
-is supplied. Run `uv run kro --help` for all options.
+recommendations and diagnostics and writes a single HTML report when `--output-dir`
+is supplied. Its name is `<output-directory-name>_<YYYYMMDD>.html`, using the
+current local date (for example, `output/example/example_20260920.html`). All
+charts, styles and scripts are embedded.
+
+Run `uv run kro --help` for all options.
 
 Use `--limits-mip-gap 0.01` to accept a 1% relative optimality gap in the final
 weighted-limit phase. The default is `0`. Optional fairness has its independent

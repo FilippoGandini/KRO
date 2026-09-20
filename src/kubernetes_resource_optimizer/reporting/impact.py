@@ -139,7 +139,7 @@ def impact_section(
     return (
         '<section id="allocation-impact"><h3>Overall allocation impact</h3>'
         f'<div class="impact-cards">{cards}</div><div class="impact-charts">{charts}</div>'
-        '<</section>'
+        '</section>'
     )
 
 

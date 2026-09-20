@@ -95,7 +95,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        help="Generate a static HTML/SVG report in this directory.",
+        help="Generate a single HTML report named <directory-name>_<YYYYMMDD>.html in this directory.",
     )
     return parser
 
@@ -199,7 +199,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     _progress(f"Recommendations ready for {len(result.workloads):,} workloads.")
     _print_summary(result)
     if args.output_dir is not None:
-        _progress(f"Generating HTML/SVG report in {args.output_dir}...")
+        _progress(f"Generating HTML report in {args.output_dir}...")
         report_path = generate_html_report(data, result, config, args.output_dir)
         _progress(f"Report generated: {report_path}")
         print(f"Report: {report_path}")
