@@ -371,7 +371,7 @@ img{{display:block;max-width:100%;height:auto;margin:auto}} .note{{padding:.8rem
 {STYLES + IMPACT_STYLES if has_current else ""}
 </style></head><body>
 <h1>{report_title}</h1>
-<h2>Summary</h2>{summary}
+<h2>Optimization summary</h2>{summary}
 <h2>Optimization settings</h2>{settings_table}
 <h2>Selected nodes</h2><div class="selected-nodes"><div>{selected_nodes_table}</div>{node_comparison}</div>
 <p class="note">Effective node demand is computed as <code>max(historical usage, recommended request)</code> for each placed pod. All charts are embedded: share this HTML file alone to view the complete report offline.</p>
