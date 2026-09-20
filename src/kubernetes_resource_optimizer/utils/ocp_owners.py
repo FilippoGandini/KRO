@@ -38,7 +38,7 @@ def _owners(path: Path, child_label: str) -> dict[str, tuple[str, str]]:
         namespaces.add(metric["namespace"])
         if len(namespaces) > 1:
             raise ConversionError(f"{path}: owner export contains multiple namespaces")
-        child = next(iter(observations)).workload_id
+        child = next(iter(observations)).pod_id
         owner = (metric["owner_kind"], metric["owner_name"])
         if child in owners and owners[child] != owner:
             raise ConversionError(f"{path}: ambiguous historical owners for {child!r}")

@@ -18,11 +18,11 @@ def test_node_series_uses_maximum_of_usage_and_request(
     )
 
     assert len(series) == 1
-    by_workload = dict(
-        zip(series[0].workload_ids, series[0].effective_demand, strict=True)
+    by_pod = dict(
+        zip(series[0].pod_ids, series[0].effective_demand, strict=True)
     )
-    assert by_workload["pod-a"] == (2.0, 3.0)
-    assert by_workload["pod-b"] == (1.0, 1.0)
+    assert by_pod["pod-a"] == (2.0, 3.0)
+    assert by_pod["pod-b"] == (1.0, 1.0)
     assert series[0].total_effective_demand == (3.0, 4.0)
     assert series[0].capacity == 4.0
     assert series[0].aggregate_request == 3.0
@@ -31,9 +31,9 @@ def test_node_series_uses_maximum_of_usage_and_request(
 
 
 def test_coverage_includes_ties_and_numeric_tolerance() -> None:
-    from kubernetes_resource_optimizer.reporting.series import WorkloadSeries
+    from kubernetes_resource_optimizer.reporting.series import PodSeries
 
-    series = WorkloadSeries("pod", "node", Resource.CPU, (),
+    series = PodSeries("pod", "node", Resource.CPU, (),
                             (0.0, 1.0, 1.0 + 5e-8, 1.0 + 2e-7), 1.0, 2.0)
     assert series.coverage(1.0) == 0.75
     assert series.coverage(0.0) == 0.25

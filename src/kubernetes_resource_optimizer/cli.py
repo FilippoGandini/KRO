@@ -36,7 +36,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--nodes", type=Path, required=True, help="Path to nodes.csv")
     parser.add_argument(
-        "--workloads", type=Path, required=True, help="Path to workloads.csv"
+        "--pods", type=Path, required=True, help="Path to pods.csv"
     )
     parser.add_argument("--usage", type=Path, required=True, help="Path to usage.csv")
     parser.add_argument(
@@ -122,14 +122,14 @@ def _print_summary(result: OptimizationResult) -> None:
     if result.optimization_message:
         print(result.optimization_message)
     print(f"Solve time: {result.solve_time_seconds:.3f}s")
-    print("Workload recommendations:")
-    for workload in result.workloads:
+    print("Pod recommendations:")
+    for pod in result.pods:
         print(
-            f"  {workload.workload_id} -> {workload.assigned_node}: "
-            f"request cpu={workload.recommended_cpu_request:g} cores, "
-            f"memory={workload.recommended_memory_request:g} MiB; "
-            f"limit cpu={workload.recommended_cpu_limit:g} cores, "
-            f"memory={workload.recommended_memory_limit:g} MiB"
+            f"  {pod.pod_id} -> {pod.assigned_node}: "
+            f"request cpu={pod.recommended_cpu_request:g} cores, "
+            f"memory={pod.recommended_memory_request:g} MiB; "
+            f"limit cpu={pod.recommended_cpu_limit:g} cores, "
+            f"memory={pod.recommended_memory_limit:g} MiB"
         )
 
 
@@ -140,9 +140,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         _progress("Loading and validating CSV data...")
-        data = load_input_data(args.nodes, args.workloads, args.usage)
+        data = load_input_data(args.nodes, args.pods, args.usage)
         _progress(
-            f"Data validated: {len(data.pods):,} workloads, "
+            f"Data validated: {len(data.pods):,} pods, "
             f"{len(data.nodes):,} candidate nodes, "
             f"{len({sample.timestamp for sample in data.usage_samples}):,} scenarios."
         )
@@ -196,7 +196,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     _progress("Extracting recommendations and computing diagnostics...")
     result = extract_solution(data, model, solver_result)
-    _progress(f"Recommendations ready for {len(result.workloads):,} workloads.")
+    _progress(f"Recommendations ready for {len(result.pods):,} pods.")
     _print_summary(result)
     if args.output_dir is not None:
         _progress(f"Generating HTML report in {args.output_dir}...")

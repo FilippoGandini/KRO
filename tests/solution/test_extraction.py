@@ -82,7 +82,7 @@ def solve_known_configuration() -> tuple[InputData, object, SolverResult]:
     return data, built, result
 
 
-def test_extracts_workloads_nodes_and_summary() -> None:
+def test_extracts_pods_nodes_and_summary() -> None:
     data, built, solver_result = solve_known_configuration()
 
     result = extract_solution(data, built, solver_result)
@@ -96,25 +96,25 @@ def test_extracts_workloads_nodes_and_summary() -> None:
     assert result.active_node_count == 1
     assert result.total_node_cost == pytest.approx(1.0)
     assert result.solve_time_seconds == solver_result.solve_time_seconds
-    assert [(item.workload_id, item.assigned_node) for item in result.workloads] == [
-        ("pod-a", result.workloads[0].assigned_node),
-        ("pod-b", result.workloads[0].assigned_node),
+    assert [(item.pod_id, item.assigned_node) for item in result.pods] == [
+        ("pod-a", result.pods[0].assigned_node),
+        ("pod-b", result.pods[0].assigned_node),
     ]
-    assert result.workloads[0].recommended_cpu_request == pytest.approx(2.0)
-    assert result.workloads[0].recommended_memory_limit == pytest.approx(350.0)
+    assert result.pods[0].recommended_cpu_request == pytest.approx(2.0)
+    assert result.pods[0].recommended_memory_limit == pytest.approx(350.0)
 
     active_node = next(node for node in result.nodes if node.active)
     inactive_node = next(node for node in result.nodes if not node.active)
-    assert active_node.assigned_workloads == ("pod-a", "pod-b")
+    assert active_node.assigned_pods == ("pod-a", "pod-b")
     assert active_node.cost == pytest.approx(1.0)
-    assert inactive_node.assigned_workloads == ()
+    assert inactive_node.assigned_pods == ()
 
 
 def test_calculates_actual_violation_rates_and_node_diagnostics() -> None:
     data, built, solver_result = solve_known_configuration()
 
     result = extract_solution(data, built, solver_result)
-    violation = {(item.workload_id, item.resource): item for item in result.violations}
+    violation = {(item.pod_id, item.resource): item for item in result.violations}
 
     assert violation["pod-a", Resource.CPU].request_violation_count == 1
     assert violation["pod-a", Resource.CPU].request_violation_rate == pytest.approx(0.5)

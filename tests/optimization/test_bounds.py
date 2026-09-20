@@ -48,7 +48,7 @@ def test_default_bounds_use_largest_heterogeneous_node_capacity() -> None:
     assert bounds.limit_upper["default", Resource.MEMORY] == 65536.0
 
 
-def test_workload_specific_bounds_take_precedence() -> None:
+def test_pod_specific_bounds_take_precedence() -> None:
     bounds = derive_bounds(sample_data())
 
     assert bounds.request_upper["bounded", Resource.CPU] == 3.0

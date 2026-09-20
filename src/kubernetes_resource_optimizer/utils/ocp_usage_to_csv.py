@@ -23,10 +23,10 @@ class ConversionError(ValueError):
 
 @dataclass(frozen=True, slots=True, order=True)
 class ObservationKey:
-    """Identity of one workload observation."""
+    """Identity of one pod observation."""
 
     timestamp: float
-    workload_id: str
+    pod_id: str
 
 
 CPU_CONVERTERS: dict[str, Callable[[float], float]] = {
@@ -78,8 +78,8 @@ def parse_matrix_export(
         values = series.get("values")
         if not isinstance(metric, dict) or not isinstance(metric.get(metric_label), str):
             raise ConversionError(f"{location} has no string metric.{metric_label}")
-        workload_id = metric[metric_label].strip()
-        if not workload_id:
+        pod_id = metric[metric_label].strip()
+        if not pod_id:
             raise ConversionError(f"{location} has an empty metric.{metric_label}")
         if not isinstance(values, list):
             raise ConversionError(f"{location}.values must be a list")
@@ -99,10 +99,10 @@ def parse_matrix_export(
                 raise ConversionError(f"{sample_location} contains a non-finite number")
             if value < 0:
                 raise ConversionError(f"{sample_location} contains a negative value")
-            key = ObservationKey(timestamp=timestamp, workload_id=workload_id)
+            key = ObservationKey(timestamp=timestamp, pod_id=pod_id)
             if key in observations:
                 raise ConversionError(
-                    f"{source}: duplicate observation for {workload_id!r} at {timestamp}"
+                    f"{source}: duplicate observation for {pod_id!r} at {timestamp}"
                 )
             observations[key] = value
     if not observations:
@@ -157,12 +157,12 @@ def convert_exports(
     try:
         with output_csv.open("w", encoding="utf-8", newline="") as stream:
             writer = csv.writer(stream)
-            writer.writerow(("timestamp", "workload_id", "cpu_usage", "memory_usage"))
+            writer.writerow(("timestamp", "pod_id", "cpu_usage", "memory_usage"))
             for key in sorted(cpu):
                 writer.writerow(
                     (
                         _format_timestamp(key.timestamp),
-                        key.workload_id,
+                        key.pod_id,
                         _format_number(CPU_CONVERTERS[cpu_unit](cpu[key])),
                         _format_number(MEMORY_CONVERTERS[memory_unit](memory[key])),
                     )
@@ -206,7 +206,7 @@ def convert_directory(
     input_dir: Path,
     output_csv: Path,
     *,
-    workloads_output: Path | None = None,
+    pods_output: Path | None = None,
     current_resources: Path | None = None,
     pod_owners: Path | None = None,
     replicaset_owners: Path | None = None,
@@ -255,12 +255,12 @@ def convert_directory(
 
     histories: dict[str, set[float]] = {}
     for key in combined_cpu:
-        histories.setdefault(key.workload_id, set()).add(key.timestamp)
+        histories.setdefault(key.pod_id, set()).add(key.timestamp)
     expected = next(iter(histories.values()))
     if any(timestamps != expected for timestamps in histories.values()):
-        raise ConversionError("pod histories are not aligned across all workloads")
-    if workloads_output is not None and workloads_output.resolve() == output_csv.resolve():
-        raise ConversionError("usage and workload output paths must differ")
+        raise ConversionError("pod histories are not aligned across all pods")
+    if pods_output is not None and pods_output.resolve() == output_csv.resolve():
+        raise ConversionError("usage and pod output paths must differ")
     # Validate timestamp formatting before writing any output.
     for timestamp in expected:
         _format_timestamp(timestamp)
@@ -269,12 +269,12 @@ def convert_directory(
     try:
         with output_csv.open("w", encoding="utf-8", newline="") as stream:
             writer = csv.writer(stream)
-            writer.writerow(("timestamp", "workload_id", "cpu_usage", "memory_usage"))
+            writer.writerow(("timestamp", "pod_id", "cpu_usage", "memory_usage"))
             for key in sorted(combined_cpu):
                 writer.writerow(
                     (
                         _format_timestamp(key.timestamp),
-                        key.workload_id,
+                        key.pod_id,
                         _format_number(CPU_CONVERTERS[cpu_unit](combined_cpu[key])),
                         _format_number(
                             MEMORY_CONVERTERS[memory_unit](combined_memory[key])
@@ -283,26 +283,26 @@ def convert_directory(
                 )
     except OSError as error:
         raise ConversionError(f"cannot write {output_csv}: {error}") from error
-    if workloads_output is not None:
+    if pods_output is not None:
         fields = (
-            "workload_id", "service_id", "current_cpu_request", "current_memory_request",
+            "pod_id", "service_id", "current_cpu_request", "current_memory_request",
             "current_cpu_limit", "current_memory_limit", "cpu_request_max",
             "memory_request_max", "cpu_limit_max", "memory_limit_max",
         )
         try:
-            workloads_output.parent.mkdir(parents=True, exist_ok=True)
-            with workloads_output.open("w", encoding="utf-8", newline="") as stream:
-                workload_writer = csv.DictWriter(stream, fieldnames=fields)
-                workload_writer.writeheader()
-                for workload_id in sorted(histories):
-                    workload_writer.writerow({
-                        "workload_id": workload_id,
-                        "service_id": services.get(workload_id, ""),
+            pods_output.parent.mkdir(parents=True, exist_ok=True)
+            with pods_output.open("w", encoding="utf-8", newline="") as stream:
+                pod_writer = csv.DictWriter(stream, fieldnames=fields)
+                pod_writer.writeheader()
+                for pod_id in sorted(histories):
+                    pod_writer.writerow({
+                        "pod_id": pod_id,
+                        "service_id": services.get(pod_id, ""),
                         **{field: _format_number(value)
-                           for field, value in current.get(workload_id, {}).items()},
+                           for field, value in current.get(pod_id, {}).items()},
                     })
         except OSError as error:
-            raise ConversionError(f"cannot write {workloads_output}: {error}") from error
+            raise ConversionError(f"cannot write {pods_output}: {error}") from error
     return len(combined_cpu)
 
 
@@ -319,8 +319,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--output", type=Path, default=Path("data/private/usage.csv")
     )
     parser.add_argument(
-        "--workloads-output", type=Path,
-        help="also write a KRO workload CSV for exactly the observed pods",
+        "--pods-output", type=Path,
+        help="also write a KRO pod CSV for exactly the observed pods",
     )
     parser.add_argument(
         "--current-resources", type=Path,
@@ -339,7 +339,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--metric-label",
         default="pod",
-        help="metric label containing the workload identifier (default: pod)",
+        help="metric label containing the pod identifier (default: pod)",
     )
     return parser
 
@@ -350,7 +350,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         count = convert_directory(
             args.input_dir,
             args.output,
-            workloads_output=args.workloads_output,
+            pods_output=args.pods_output,
             current_resources=args.current_resources,
             pod_owners=args.pod_owners,
             replicaset_owners=args.replicaset_owners,

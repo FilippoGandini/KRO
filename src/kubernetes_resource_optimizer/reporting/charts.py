@@ -16,7 +16,7 @@ from kubernetes_resource_optimizer.data.models import Resource
 from kubernetes_resource_optimizer.reporting.formatting import format_percent
 from kubernetes_resource_optimizer.reporting.series import (
     NodeSeries,
-    WorkloadSeries,
+    PodSeries,
 )
 
 _COLORS = (
@@ -62,10 +62,10 @@ def save_node_chart(cpu: NodeSeries, memory: NodeSeries, destination: Path | Byt
             axis.stackplot(
                 x_values,
                 *series.effective_demand,
-                labels=series.workload_ids,
+                labels=series.pod_ids,
                 colors=[
                     _COLORS[index % len(_COLORS)]
-                    for index in range(len(series.workload_ids))
+                    for index in range(len(series.pod_ids))
                 ],
                 alpha=0.82,
             )
@@ -105,10 +105,10 @@ def save_node_chart(cpu: NodeSeries, memory: NodeSeries, destination: Path | Byt
     plt.close(figure)
 
 
-def save_workload_chart(
-    cpu: WorkloadSeries, memory: WorkloadSeries, destination: Path | BytesIO
+def save_pod_chart(
+    cpu: PodSeries, memory: PodSeries, destination: Path | BytesIO
 ) -> None:
-    """Save one two-panel workload usage/request/limit chart as SVG."""
+    """Save one two-panel pod usage/request/limit chart as SVG."""
 
     figure, axes = plt.subplots(2, 1, figsize=(12, 8), constrained_layout=True)
     for axis, series in zip(axes, (cpu, memory), strict=True):
@@ -183,6 +183,6 @@ def save_workload_chart(
         axis.grid(axis="y", alpha=0.25)
         _configure_scenario_axis(axis, series.timestamps)
         axis.legend(loc="upper left", bbox_to_anchor=(1.01, 1), fontsize="small")
-    figure.suptitle(f"Pod {cpu.workload_id} on {cpu.assigned_node}", fontsize=15)
+    figure.suptitle(f"Pod {cpu.pod_id} on {cpu.assigned_node}", fontsize=15)
     figure.savefig(destination, format="svg", bbox_inches="tight")
     plt.close(figure)

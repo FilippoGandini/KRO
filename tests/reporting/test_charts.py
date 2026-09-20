@@ -9,8 +9,8 @@ import pytest
 from matplotlib.figure import Figure
 
 from kubernetes_resource_optimizer.data.models import Resource
-from kubernetes_resource_optimizer.reporting.charts import save_workload_chart
-from kubernetes_resource_optimizer.reporting.series import WorkloadSeries
+from kubernetes_resource_optimizer.reporting.charts import save_pod_chart
+from kubernetes_resource_optimizer.reporting.series import PodSeries
 
 
 def test_irregular_timestamps_position_usage_and_violations(
@@ -24,9 +24,9 @@ def test_irregular_timestamps_position_usage_and_violations(
         captured.extend(figure.axes)
 
     monkeypatch.setattr(Figure, "savefig", capture)
-    cpu = WorkloadSeries("pod", "node", Resource.CPU, timestamps, (1, 3, 5), 2, 4)
-    memory = WorkloadSeries("pod", "node", Resource.MEMORY, timestamps, (1, 3, 5), 2, 4)
-    save_workload_chart(cpu, memory, tmp_path / "chart.svg")
+    cpu = PodSeries("pod", "node", Resource.CPU, timestamps, (1, 3, 5), 2, 4)
+    memory = PodSeries("pod", "node", Resource.MEMORY, timestamps, (1, 3, 5), 2, 4)
+    save_pod_chart(cpu, memory, tmp_path / "chart.svg")
     expected = mdates.date2num(timestamps)
     for axis in captured:
         assert axis.lines[0].get_xdata() == pytest.approx(expected, rel=0, abs=1e-10)

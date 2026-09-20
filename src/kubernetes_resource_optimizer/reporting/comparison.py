@@ -7,7 +7,7 @@ from kubernetes_resource_optimizer.reporting.formatting import (
     format_number,
     format_percent,
 )
-from kubernetes_resource_optimizer.reporting.series import WorkloadSeries
+from kubernetes_resource_optimizer.reporting.series import PodSeries
 
 STYLES = """
 .allocation{display:block;padding:.35rem .5rem;margin:.15rem 0;border-left:3px solid;white-space:nowrap}
@@ -23,7 +23,7 @@ NOTE = """<p class="comparison-key">Each cell compares Current and Recommended v
 and their historical coverage (usage ≤ boundary)"""
 
 
-def _cell(series: WorkloadSeries, kind: str, epsilon: float) -> str:
+def _cell(series: PodSeries, kind: str, epsilon: float) -> str:
     recommended = series.request if kind == "request" else series.limit
     current = series.current_request if kind == "request" else series.current_limit
     parts = []
@@ -53,7 +53,7 @@ def _cell(series: WorkloadSeries, kind: str, epsilon: float) -> str:
 
 
 def comparison_table(
-    cpu: tuple[WorkloadSeries, ...], memory: tuple[WorkloadSeries, ...],
+    cpu: tuple[PodSeries, ...], memory: tuple[PodSeries, ...],
     risks: tuple[float, float, float, float],
 ) -> str:
     headings = ("Pod", "Node", "CPU request (cores)", "CPU limit (cores)",
@@ -68,7 +68,7 @@ def comparison_table(
             _cell(memory_series, "limit", risks[3]),
         )
         rows.append(
-            f'<tr><td>{html.escape(cpu_series.workload_id)}</td>'
+            f'<tr><td>{html.escape(cpu_series.pod_id)}</td>'
             f'<td>{html.escape(cpu_series.assigned_node)}</td>{"".join(cells)}</tr>'
         )
     return f'<table><thead><tr>{header}</tr></thead><tbody>{"".join(rows)}</tbody></table>'

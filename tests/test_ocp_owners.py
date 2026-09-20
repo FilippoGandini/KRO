@@ -1,4 +1,4 @@
-"""Offline tests of controller mapping and generated KRO workload CSVs."""
+"""Offline tests of controller mapping and generated KRO pod CSVs."""
 
 import csv
 import json
@@ -92,16 +92,16 @@ def test_cli_populates_only_observed_pods(tmp_path: Path) -> None:
     replicasets = _write(tmp_path / "replicaset-owners.json", [
         _series("replicaset", "api-rs", "Deployment", "api"),
     ])
-    output = tmp_path / "workload.csv"
+    output = tmp_path / "pods.csv"
     assert main([
         "--input-dir", str(tmp_path), "--output", str(tmp_path / "usage.csv"),
-        "--workloads-output", str(output), "--pod-owners", str(pods),
+        "--pods-output", str(output), "--pod-owners", str(pods),
         "--replicaset-owners", str(replicasets),
     ]) == 0
     with output.open() as stream:
         rows = list(csv.DictReader(stream))
     assert len(rows) == 1
-    assert rows[0]["workload_id"] == "a"
+    assert rows[0]["pod_id"] == "a"
     assert rows[0]["service_id"] == "Deployment/api"
 
 

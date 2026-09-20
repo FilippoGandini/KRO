@@ -16,8 +16,8 @@ def test_cli_optimizes_example_csv_files(
         [
             "--nodes",
             str(example_dir / "nodes.csv"),
-            "--workloads",
-            str(example_dir / "workloads.csv"),
+            "--pods",
+            str(example_dir / "pods.csv"),
             "--usage",
             str(example_dir / "usage.csv"),
         ]
@@ -35,7 +35,7 @@ def test_cli_optimizes_example_csv_files(
 
 def test_cli_defaults_to_highs_with_an_unlimited_runtime() -> None:
     args = build_parser().parse_args(
-        ["--nodes", "nodes.csv", "--workloads", "workloads.csv", "--usage", "usage.csv"]
+        ["--nodes", "nodes.csv", "--pods", "pods.csv", "--usage", "usage.csv"]
     )
 
     assert args.solver.value == "highs"
@@ -43,7 +43,7 @@ def test_cli_defaults_to_highs_with_an_unlimited_runtime() -> None:
 
 
 def test_priority_and_fairness_options() -> None:
-    base = ["--nodes", "n.csv", "--workloads", "w.csv", "--usage", "u.csv"]
+    base = ["--nodes", "n.csv", "--pods", "w.csv", "--usage", "u.csv"]
     defaults = build_parser().parse_args(base)
     assert defaults.cpu_limit_peak_multiplier == 1.5
     assert defaults.memory_limit_peak_multiplier == 1.5
@@ -81,8 +81,8 @@ def test_cli_prints_infeasibility_diagnostics(
         [
             "--nodes",
             str(example_dir / "nodes.csv"),
-            "--workloads",
-            str(example_dir / "workloads.csv"),
+            "--pods",
+            str(example_dir / "pods.csv"),
             "--usage",
             str(example_dir / "usage.csv"),
             "--cpu-limit-overcommit",

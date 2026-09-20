@@ -19,7 +19,7 @@ BoundKey = tuple[str, Resource]
 
 @dataclass(frozen=True, slots=True)
 class DerivedBounds:
-    """Workload/resource indexed parameters used by the MILP."""
+    """Pod/resource indexed parameters used by the MILP."""
 
     request_upper: dict[BoundKey, float]
     limit_upper: dict[BoundKey, float]
@@ -61,7 +61,7 @@ def derive_request_upper_bound(
 ) -> float:
     """Derive R_max[i,h].
 
-    A supplied workload-specific request maximum is the tight bound. Otherwise,
+    A supplied pod-specific request maximum is the tight bound. Otherwise,
     the safe fallback is the maximum candidate-node capacity for the resource.
     """
 

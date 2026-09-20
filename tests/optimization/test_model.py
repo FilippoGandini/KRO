@@ -43,7 +43,7 @@ def make_data(*, pod_count: int, node_count: int) -> InputData:
     )
 
 
-def test_one_workload_one_node_uses_the_only_node() -> None:
+def test_one_pod_one_node_uses_the_only_node() -> None:
     built = build_model(make_data(pod_count=1, node_count=1), ZERO_RISK)
 
     result = solve_lexicographic(built, CbcSolver())
@@ -54,7 +54,7 @@ def test_one_workload_one_node_uses_the_only_node() -> None:
     assert built.variables.node_active["node-0"].varValue == pytest.approx(1.0)
 
 
-def test_two_workloads_two_nodes_minimizes_to_one_active_node() -> None:
+def test_two_pods_two_nodes_minimizes_to_one_active_node() -> None:
     built = build_model(make_data(pod_count=2, node_count=2), ZERO_RISK)
 
     result = solve_lexicographic(built, CbcSolver())
@@ -66,7 +66,7 @@ def test_two_workloads_two_nodes_minimizes_to_one_active_node() -> None:
     ) == pytest.approx(1.0)
 
 
-def test_every_workload_is_assigned_exactly_once() -> None:
+def test_every_pod_is_assigned_exactly_once() -> None:
     built = build_model(make_data(pod_count=2, node_count=2), ZERO_RISK)
     solve_lexicographic(built, CbcSolver())
 
@@ -77,7 +77,7 @@ def test_every_workload_is_assigned_exactly_once() -> None:
         ) == pytest.approx(1.0)
 
 
-def test_inactive_node_cannot_host_a_workload() -> None:
+def test_inactive_node_cannot_host_a_pod() -> None:
     built = build_model(make_data(pod_count=1, node_count=1), ZERO_RISK)
     built.problem.addConstraint(
         built.variables.node_active["node-0"] == 0, "force_inactive"

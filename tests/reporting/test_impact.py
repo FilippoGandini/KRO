@@ -10,13 +10,13 @@ from kubernetes_resource_optimizer.reporting.impact import (
     _card,
     aggregate_impact,
 )
-from kubernetes_resource_optimizer.reporting.series import WorkloadSeries
+from kubernetes_resource_optimizer.reporting.series import PodSeries
 
 
 def test_partial_cohorts_and_pooled_coverage() -> None:
-    first = WorkloadSeries("a", "node", Resource.CPU, (), (1, 2, 3), 2, 3, 1, None)
-    second = WorkloadSeries("b", "node", Resource.CPU, (), (0,), 1, 2, 0, None)
-    missing = WorkloadSeries("c", "node", Resource.CPU, (), (100,), 100, 100)
+    first = PodSeries("a", "node", Resource.CPU, (), (1, 2, 3), 2, 3, 1, None)
+    second = PodSeries("b", "node", Resource.CPU, (), (0,), 1, 2, 0, None)
+    missing = PodSeries("c", "node", Resource.CPU, (), (100,), 100, 100)
     impact = aggregate_impact((first, second, missing), "request", 0.5)
     assert impact is not None
     assert (impact.pods, impact.total_pods) == (2, 3)
@@ -30,7 +30,7 @@ def test_partial_cohorts_and_pooled_coverage() -> None:
 
 
 def test_zero_base_does_not_fabricate_percentage_and_ties_are_covered() -> None:
-    series = WorkloadSeries("a", "node", Resource.CPU, (), (0, 5e-8), 1, 1, 0, 0)
+    series = PodSeries("a", "node", Resource.CPU, (), (0, 5e-8), 1, 1, 0, 0)
     impact = aggregate_impact((series,), "request", 0)
     assert impact is not None
     assert impact.current_coverage == 1
@@ -41,7 +41,7 @@ def test_zero_base_does_not_fabricate_percentage_and_ties_are_covered() -> None:
 
 
 def test_bar_scale_preserves_values_above_capacity_and_overcommit() -> None:
-    series = WorkloadSeries("a", "node", Resource.CPU, (), (1,), 1, 8, 2, 12)
+    series = PodSeries("a", "node", Resource.CPU, (), (1,), 1, 8, 2, 12)
     impacts = (aggregate_impact((series,), "request", 0),
                aggregate_impact((series,), "limit", 0))
     chart = _bars(Resource.CPU, 4, 2, impacts)
@@ -53,5 +53,5 @@ def test_bar_scale_preserves_values_above_capacity_and_overcommit() -> None:
 
 @pytest.mark.parametrize("kind", ["request", "limit"])
 def test_absent_current_data_produces_no_aggregate(kind: str) -> None:
-    series = WorkloadSeries("a", "node", Resource.CPU, (), (1,), 1, 2)
+    series = PodSeries("a", "node", Resource.CPU, (), (1,), 1, 2)
     assert aggregate_impact((series,), kind, 0) is None

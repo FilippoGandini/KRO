@@ -14,7 +14,7 @@ from kubernetes_resource_optimizer.data.models import InputData, Resource
 from kubernetes_resource_optimizer.optimization.config import OptimizationConfig
 from kubernetes_resource_optimizer.reporting.charts import (
     save_node_chart,
-    save_workload_chart,
+    save_pod_chart,
 )
 from kubernetes_resource_optimizer.reporting.comparison import (
     NOTE,
@@ -29,7 +29,7 @@ from kubernetes_resource_optimizer.reporting.impact import STYLES as IMPACT_STYL
 from kubernetes_resource_optimizer.reporting.impact import impact_section
 from kubernetes_resource_optimizer.reporting.series import (
     build_node_series,
-    build_workload_series,
+    build_pod_series,
 )
 from kubernetes_resource_optimizer.solution.models import OptimizationResult
 
@@ -142,15 +142,15 @@ def generate_html_report(
             save_node_chart(node_cpu_item, node_memory_item, buffer)
             node_images.append((node_cpu_item.node_id, _svg_data_uri(buffer)))
 
-    workload_cpu = build_workload_series(data, result, Resource.CPU)
-    workload_memory = build_workload_series(data, result, Resource.MEMORY)
-    workload_images: list[tuple[str, str]] = []
-    for workload_cpu_item, workload_memory_item in zip(
-        workload_cpu, workload_memory, strict=True
+    pod_cpu = build_pod_series(data, result, Resource.CPU)
+    pod_memory = build_pod_series(data, result, Resource.MEMORY)
+    pod_images: list[tuple[str, str]] = []
+    for pod_cpu_item, pod_memory_item in zip(
+        pod_cpu, pod_memory, strict=True
     ):
         with BytesIO() as buffer:
-            save_workload_chart(workload_cpu_item, workload_memory_item, buffer)
-            workload_images.append((workload_cpu_item.workload_id, _svg_data_uri(buffer)))
+            save_pod_chart(pod_cpu_item, pod_memory_item, buffer)
+            pod_images.append((pod_cpu_item.pod_id, _svg_data_uri(buffer)))
 
     timestamps = sorted({sample.timestamp for sample in data.usage_samples})
     period = _historical_period(timestamps)
@@ -184,28 +184,28 @@ def generate_html_report(
         ],
         ("Metric", "Value"),
     )
-    violations = {(item.workload_id, item.resource): item for item in result.violations}
-    workload_rows = [
+    violations = {(item.pod_id, item.resource): item for item in result.violations}
+    pod_rows = [
         (
-            workload.workload_id,
-            workload.assigned_node,
-            f"{format_number(workload.recommended_cpu_request)}",
-            f"{format_number(workload.recommended_cpu_limit)}",
-            _format_memory(workload.recommended_memory_request, fixed_precision=True),
-            _format_memory(workload.recommended_memory_limit, fixed_precision=True),
+            pod.pod_id,
+            pod.assigned_node,
+            f"{format_number(pod.recommended_cpu_request)}",
+            f"{format_number(pod.recommended_cpu_limit)}",
+            _format_memory(pod.recommended_memory_request, fixed_precision=True),
+            _format_memory(pod.recommended_memory_limit, fixed_precision=True),
             *(
-                f"{format_percent(violations[workload.workload_id, resource].request_violation_rate, 2)}"
+                f"{format_percent(violations[pod.pod_id, resource].request_violation_rate, 2)}"
                 for resource in (Resource.CPU, Resource.MEMORY)
             ),
             *(
-                f"{format_percent(violations[workload.workload_id, resource].limit_violation_rate, 2)}"
+                f"{format_percent(violations[pod.pod_id, resource].limit_violation_rate, 2)}"
                 for resource in (Resource.CPU, Resource.MEMORY)
             ),
         )
-        for workload in result.workloads
+        for pod in result.pods
     ]
-    workload_table = _table(
-        workload_rows,
+    pod_table = _table(
+        pod_rows,
         (
             "Pod",
             "Node",
@@ -221,11 +221,11 @@ def generate_html_report(
     )
     has_current = any(
         item.current_request is not None or item.current_limit is not None
-        for item in (*workload_cpu, *workload_memory)
+        for item in (*pod_cpu, *pod_memory)
     )
     if has_current:
-        workload_table = comparison_table(
-            workload_cpu, workload_memory,
+        pod_table = comparison_table(
+            pod_cpu, pod_memory,
             (config.epsilon_cpu_request, config.epsilon_cpu_limit,
              config.epsilon_memory_request, config.epsilon_memory_limit),
         )
@@ -338,9 +338,9 @@ def generate_html_report(
         f'<section><h3>{html.escape(identifier)}</h3><img src="{html.escape(path)}" alt="Node {html.escape(identifier)} allocation chart"></section>'
         for identifier, path in node_images
     )
-    workload_sections = "".join(
+    pod_sections = "".join(
         f'<section><h3>{html.escape(identifier)}</h3><img src="{html.escape(path)}" alt="Pod {html.escape(identifier)} usage chart"></section>'
-        for identifier, path in workload_images
+        for identifier, path in pod_images
     )
     report_title = html.escape(f"KRO Report: {output_directory.resolve().name}")
     document = f"""<!doctype html>
@@ -377,19 +377,19 @@ img{{display:block;max-width:100%;height:auto;margin:auto}} .note{{padding:.8rem
 <p class="note">Effective node demand is computed as <code>max(historical usage, recommended request)</code> for each placed pod. All charts are embedded: share this HTML file alone to view the complete report offline.</p>
 <h2>Recommendations</h2>
 {NOTE if has_current else ""}
-<div class="table-controls"><label>Pod <input id="workload-search" type="search" placeholder="Search pod"></label>
+<div class="table-controls"><label>Pod <input id="pod-search" type="search" placeholder="Search pod"></label>
 <label>Node <select id="node-filter"><option value="">All nodes</option>{node_options}</select></label>
 <span id="row-count" role="status"></span></div>
-<div id="recommendations" class="table-scroll">{workload_table}</div>
-{impact_section(data, result, config, workload_cpu, workload_memory) if has_current else ""}
+<div id="recommendations" class="table-scroll">{pod_table}</div>
+{impact_section(data, result, config, pod_cpu, pod_memory) if has_current else ""}
 <div class="chart-tabs" role="tablist" aria-label="Allocation charts">
 <button type="button" id="nodes-tab" role="tab" aria-selected="true" aria-controls="nodes-panel" tabindex="0">Nodes</button>
-<button type="button" id="workloads-tab" role="tab" aria-selected="false" aria-controls="workloads-panel" tabindex="-1">Pods</button>
+<button type="button" id="pods-tab" role="tab" aria-selected="false" aria-controls="pods-panel" tabindex="-1">Pods</button>
 </div>
 <div class="chart-panel" id="nodes-panel" role="tabpanel" aria-labelledby="nodes-tab" tabindex="0">
 <h2>Active node allocation</h2>{node_sections}</div>
-<div class="chart-panel" id="workloads-panel" role="tabpanel" aria-labelledby="workloads-tab" tabindex="0" hidden>
-<h2>Pod usage and boundaries</h2>{workload_sections}</div>
+<div class="chart-panel" id="pods-panel" role="tabpanel" aria-labelledby="pods-tab" tabindex="0" hidden>
+<h2>Pod usage and boundaries</h2>{pod_sections}</div>
 <noscript><style>.chart-tabs{{display:none}}.chart-panel[hidden]{{display:block}}</style></noscript>
 {_CHART_TABS_SCRIPT}
 {_TABLE_SCRIPT}
@@ -404,7 +404,7 @@ _TABLE_SCRIPT = r"""<script>
 (() => {
   const table = document.querySelector('#recommendations table');
   const rows = Array.from(table.tBodies[0].rows);
-  const search = document.getElementById('workload-search');
+  const search = document.getElementById('pod-search');
   const filter = document.getElementById('node-filter');
   const update = () => {
     let count = 0;

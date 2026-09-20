@@ -77,7 +77,7 @@ def add_limit_headroom_fairness_constraints(
     variables: ModelVariables,
     requests: dict[tuple[str, Resource], float],
 ) -> None:
-    """Bound alpha[h] by every workload's normalized limit headroom.
+    """Bound alpha[h] by every pod's normalized limit headroom.
 
     Since L_max[i,h] is a finite parameter, the expression
     ``(l[i,h] - r[i,h]) / L_max[i,h]`` is linear.

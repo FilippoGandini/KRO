@@ -36,8 +36,8 @@ def test_generates_only_dated_html_with_embedded_charts(
     assert "comparison-key" not in document
     assert "<small>Current</small>" not in document
     assert 'id="nodes-tab" role="tab" aria-selected="true"' in document
-    assert 'id="workloads-tab" role="tab" aria-selected="false"' in document
-    assert 'aria-labelledby="workloads-tab" tabindex="0" hidden' in document
+    assert 'id="pods-tab" role="tab" aria-selected="false"' in document
+    assert 'aria-labelledby="pods-tab" tabindex="0" hidden' in document
     assert "Optimization settings" in document
     assert "<td>Solver</td><td>CBC</td>" in document
     assert "CPU request risk tolerance" in document

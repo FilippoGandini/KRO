@@ -11,10 +11,10 @@ from kubernetes_resource_optimizer.optimization.solver import (
 
 
 @dataclass(frozen=True, slots=True)
-class WorkloadResult:
-    """Rightsizing and placement recommendation for one workload."""
+class PodResult:
+    """Rightsizing and placement recommendation for one pod."""
 
-    workload_id: str
+    pod_id: str
     recommended_cpu_request: float
     recommended_memory_request: float
     recommended_cpu_limit: float
@@ -24,19 +24,19 @@ class WorkloadResult:
 
 @dataclass(frozen=True, slots=True)
 class NodeResult:
-    """Activation and assigned workloads for one candidate node."""
+    """Activation and assigned pods for one candidate node."""
 
     node_id: str
     cost: float
     active: bool
-    assigned_workloads: tuple[str, ...]
+    assigned_pods: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
 class ViolationDiagnostics:
-    """Observed exceedances for one workload and resource."""
+    """Observed exceedances for one pod and resource."""
 
-    workload_id: str
+    pod_id: str
     resource: Resource
     request_violation_count: int
     request_violation_rate: float
@@ -67,7 +67,7 @@ class OptimizationResult:
     solve_time_seconds: float
     model_variable_count: int
     model_constraint_count: int
-    workloads: tuple[WorkloadResult, ...]
+    pods: tuple[PodResult, ...]
     nodes: tuple[NodeResult, ...]
     violations: tuple[ViolationDiagnostics, ...]
     node_diagnostics: tuple[NodeDiagnostics, ...]

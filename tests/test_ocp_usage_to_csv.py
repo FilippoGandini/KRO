@@ -40,7 +40,7 @@ def test_keeps_cores_and_converts_bytes_to_canonical_units(tmp_path: Path) -> No
     assert rows == [
         {
             "timestamp": "2026-08-24T09:00:00Z",
-            "workload_id": "pod1",
+            "pod_id": "pod1",
             "cpu_usage": "0.385790345098765",
             "memory_usage": "512",
         }
@@ -106,7 +106,7 @@ def test_combines_all_named_pairs_from_directory(tmp_path: Path) -> None:
 
     with output_path.open(encoding="utf-8", newline="") as stream:
         rows = list(csv.DictReader(stream))
-    assert [row["workload_id"] for row in rows] == ["pod1", "pod2"]
+    assert [row["pod_id"] for row in rows] == ["pod1", "pod2"]
     assert [row["cpu_usage"] for row in rows] == ["0.5", "0.7"]
     assert [row["memory_usage"] for row in rows] == ["1", "2"]
 
@@ -120,7 +120,7 @@ def test_directory_rejects_missing_resource_pair(tmp_path: Path) -> None:
         convert_directory(input_dir, tmp_path / "usage.csv")
 
 
-def test_writes_kro_workloads_for_observed_pods(tmp_path: Path) -> None:
+def test_writes_kro_pods_for_observed_pods(tmp_path: Path) -> None:
     from kubernetes_resource_optimizer.data.csv_loader import load_pods_csv
     from kubernetes_resource_optimizer.utils.ocp_usage_to_csv import main
 
@@ -130,12 +130,12 @@ def test_writes_kro_workloads_for_observed_pods(tmp_path: Path) -> None:
                 tmp_path / f"{pod}-{resource}.json",
                 _export(pod, [[1787562000, "1"], [1787565600, "2"]]),
             )
-    workloads = tmp_path / "workload.csv"
+    pods_path = tmp_path / "pods.csv"
     assert main([
         "--input-dir", str(tmp_path), "--output", str(tmp_path / "usage.csv"),
-        "--workloads-output", str(workloads),
+        "--pods-output", str(pods_path),
     ]) == 0
-    pods = load_pods_csv(workloads)
+    pods = load_pods_csv(pods_path)
     assert [pod.pod_id for pod in pods] == ["pod-a", "pod-b"]
     assert all(pod.service_id is None for pod in pods)
     assert all(pod.cpu_limit_max is None for pod in pods)
@@ -151,7 +151,7 @@ def test_rejects_different_histories_between_pods(tmp_path: Path) -> None:
     with pytest.raises(ConversionError, match="pod histories are not aligned"):
         convert_directory(
             tmp_path, tmp_path / "usage.csv",
-            workloads_output=tmp_path / "workload.csv",
+            pods_output=tmp_path / "pods.csv",
         )
     assert not (tmp_path / "usage.csv").exists()
-    assert not (tmp_path / "workload.csv").exists()
+    assert not (tmp_path / "pods.csv").exists()

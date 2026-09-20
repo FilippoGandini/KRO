@@ -1,4 +1,4 @@
-workload_id,service_id,current_cpu_request,current_memory_request,current_cpu_limit,current_memory_limit,cpu_request_max,memory_request_max,cpu_limit_max,memory_limit_max
+pod_id,service_id,current_cpu_request,current_memory_request,current_cpu_limit,current_memory_limit,cpu_request_max,memory_request_max,cpu_limit_max,memory_limit_max
 backend-0,backend,2.6,3584,4.5,5120,2.0,3000,2.8,3400
 backend-1,backend,2.6,3584,4.5,5120,2.0,3000,2.8,3400
 frontend-0,frontend,2.0,3072,3.5,4608,1.6,2500,2.1,2800

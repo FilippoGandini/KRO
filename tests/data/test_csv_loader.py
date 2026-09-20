@@ -60,6 +60,16 @@ def test_loads_node_cost(tmp_path: Path) -> None:
     assert data.nodes[0].cost == pytest.approx(0.125)
 
 
+@pytest.mark.parametrize("input_name", ["pods", "usage"])
+def test_requires_pod_id_column(tmp_path: Path, input_name: str) -> None:
+    csv = (
+        "service_id\napi\n" if input_name == "pods"
+        else "timestamp,cpu_usage,memory_usage\n2026-08-01T10:00:00Z,1,128\n"
+    )
+    with pytest.raises(InputValidationError, match="missing required columns: pod_id"):
+        load(tmp_path, **{input_name: csv})
+
+
 @pytest.mark.parametrize("cost", ["0", "-1", "nan", "inf"])
 def test_rejects_non_positive_or_non_finite_node_cost(
     tmp_path: Path, cost: str

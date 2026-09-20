@@ -9,13 +9,13 @@ from kubernetes_resource_optimizer.reporting.formatting import (
     format_number,
     format_percent,
 )
-from kubernetes_resource_optimizer.reporting.series import WorkloadSeries
+from kubernetes_resource_optimizer.reporting.series import PodSeries
 from kubernetes_resource_optimizer.solution.models import OptimizationResult
 
 
 @dataclass(frozen=True, slots=True)
 class AllocationImpact:
-    """Compare only workloads that supply the relevant current boundary."""
+    """Compare only pods that supply the relevant current boundary."""
 
     pods: int
     total_pods: int
@@ -28,7 +28,7 @@ class AllocationImpact:
 
 
 def aggregate_impact(
-    series: tuple[WorkloadSeries, ...], kind: str, epsilon: float,
+    series: tuple[PodSeries, ...], kind: str, epsilon: float,
 ) -> AllocationImpact | None:
     pairs = [
         (item, current, item.request if kind == "request" else item.limit)
@@ -115,9 +115,9 @@ def _bars(
 
 def impact_section(
     data: InputData, result: OptimizationResult, config: OptimizationConfig,
-    cpu: tuple[WorkloadSeries, ...], memory: tuple[WorkloadSeries, ...],
+    cpu: tuple[PodSeries, ...], memory: tuple[PodSeries, ...],
 ) -> str:
-    """Render a fixed-size summary; no additional per-workload report rows."""
+    """Render a fixed-size summary; no additional per-pod report rows."""
     cpu_impacts = (aggregate_impact(cpu, "request", config.epsilon_cpu_request),
                    aggregate_impact(cpu, "limit", config.epsilon_cpu_limit))
     memory_impacts = (aggregate_impact(memory, "request", config.epsilon_memory_request),

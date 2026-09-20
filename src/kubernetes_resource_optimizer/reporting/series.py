@@ -7,15 +7,15 @@ from datetime import datetime
 from kubernetes_resource_optimizer.data.models import InputData, Resource, UsageSample
 from kubernetes_resource_optimizer.solution.models import (
     OptimizationResult,
-    WorkloadResult,
+    PodResult,
 )
 
 
 @dataclass(frozen=True, slots=True)
-class WorkloadSeries:
-    """Historical usage and recommendation boundaries for one workload."""
+class PodSeries:
+    """Historical usage and recommendation boundaries for one pod."""
 
-    workload_id: str
+    pod_id: str
     assigned_node: str
     resource: Resource
     timestamps: tuple[datetime, ...]
@@ -37,7 +37,7 @@ class NodeSeries:
     node_id: str
     resource: Resource
     timestamps: tuple[datetime, ...]
-    workload_ids: tuple[str, ...]
+    pod_ids: tuple[str, ...]
     effective_demand: tuple[tuple[float, ...], ...]
     capacity: float
     aggregate_request: float
@@ -46,7 +46,7 @@ class NodeSeries:
 
     @property
     def total_effective_demand(self) -> tuple[float, ...]:
-        """Return scenario totals across workloads."""
+        """Return scenario totals across pods."""
 
         return tuple(map(sum, zip(*self.effective_demand, strict=True)))
 
@@ -55,44 +55,44 @@ def _usage(sample: UsageSample, resource: Resource) -> float:
     return sample.cpu_usage if resource is Resource.CPU else sample.memory_usage
 
 
-def _request(result: WorkloadResult, resource: Resource) -> float:
+def _request(result: PodResult, resource: Resource) -> float:
     if resource is Resource.CPU:
         return result.recommended_cpu_request
     return result.recommended_memory_request
 
 
-def _limit(result: WorkloadResult, resource: Resource) -> float:
+def _limit(result: PodResult, resource: Resource) -> float:
     if resource is Resource.CPU:
         return result.recommended_cpu_limit
     return result.recommended_memory_limit
 
 
-def build_workload_series(
+def build_pod_series(
     data: InputData, result: OptimizationResult, resource: Resource
-) -> tuple[WorkloadSeries, ...]:
-    """Build chronologically ordered workload series from inputs and solution."""
+) -> tuple[PodSeries, ...]:
+    """Build chronologically ordered pod series from inputs and solution."""
 
-    samples_by_workload: dict[str, list[UsageSample]] = defaultdict(list)
+    samples_by_pod: dict[str, list[UsageSample]] = defaultdict(list)
     for sample in data.usage_samples:
-        samples_by_workload[sample.pod_id].append(sample)
+        samples_by_pod[sample.pod_id].append(sample)
 
     pods = {pod.pod_id: pod for pod in data.pods}
-    series: list[WorkloadSeries] = []
-    for workload in result.workloads:
+    series: list[PodSeries] = []
+    for pod in result.pods:
         samples = sorted(
-            samples_by_workload[workload.workload_id], key=lambda item: item.timestamp
+            samples_by_pod[pod.pod_id], key=lambda item: item.timestamp
         )
         series.append(
-            WorkloadSeries(
-                workload_id=workload.workload_id,
-                assigned_node=workload.assigned_node,
+            PodSeries(
+                pod_id=pod.pod_id,
+                assigned_node=pod.assigned_node,
                 resource=resource,
                 timestamps=tuple(sample.timestamp for sample in samples),
                 usage=tuple(_usage(sample, resource) for sample in samples),
-                request=_request(workload, resource),
-                limit=_limit(workload, resource),
-                current_request=getattr(pods[workload.workload_id], f"current_{resource.value}_request"),
-                current_limit=getattr(pods[workload.workload_id], f"current_{resource.value}_limit"),
+                request=_request(pod, resource),
+                limit=_limit(pod, resource),
+                current_request=getattr(pods[pod.pod_id], f"current_{resource.value}_request"),
+                current_limit=getattr(pods[pod.pod_id], f"current_{resource.value}_limit"),
             )
         )
     return tuple(series)
@@ -106,8 +106,8 @@ def build_node_series(
 ) -> tuple[NodeSeries, ...]:
     """Build active-node series using the intended max(usage, request) demand."""
 
-    workload_series = {
-        item.workload_id: item for item in build_workload_series(data, result, resource)
+    pod_series = {
+        item.pod_id: item for item in build_pod_series(data, result, resource)
     }
     node_inputs = {node.node_id: node for node in data.nodes}
     node_series: list[NodeSeries] = []
@@ -116,12 +116,12 @@ def build_node_series(
             continue
         components = tuple(
             tuple(max(value, series.request) for value in series.usage)
-            for workload_id in node_result.assigned_workloads
-            for series in (workload_series[workload_id],)
+            for pod_id in node_result.assigned_pods
+            for series in (pod_series[pod_id],)
         )
         timestamps = (
-            workload_series[node_result.assigned_workloads[0]].timestamps
-            if node_result.assigned_workloads
+            pod_series[node_result.assigned_pods[0]].timestamps
+            if node_result.assigned_pods
             else ()
         )
         node = node_inputs[node_result.node_id]
@@ -133,16 +133,16 @@ def build_node_series(
                 node_id=node_result.node_id,
                 resource=resource,
                 timestamps=timestamps,
-                workload_ids=node_result.assigned_workloads,
+                pod_ids=node_result.assigned_pods,
                 effective_demand=components,
                 capacity=capacity,
                 aggregate_request=sum(
-                    workload_series[item].request
-                    for item in node_result.assigned_workloads
+                    pod_series[item].request
+                    for item in node_result.assigned_pods
                 ),
                 aggregate_limit=sum(
-                    workload_series[item].limit
-                    for item in node_result.assigned_workloads
+                    pod_series[item].limit
+                    for item in node_result.assigned_pods
                 ),
                 limit_boundary=limit_overcommit * capacity,
             )

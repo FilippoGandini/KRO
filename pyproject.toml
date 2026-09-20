@@ -1,7 +1,7 @@
 [project]
 name = "kubernetes-resource-optimizer"
 version = "0.1.0"
-description = "Offline MILP optimizer for for Kubernetes workload rightsizing and placement"
+description = "Offline MILP optimizer for for Kubernetes pod rightsizing and placement"
 readme = "README.md"
 license = "Apache-2.0"
 authors = [

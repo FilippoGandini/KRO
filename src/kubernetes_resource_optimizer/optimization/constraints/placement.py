@@ -1,4 +1,4 @@
-"""Workload assignment and node-activation constraints."""
+"""Pod assignment and node-activation constraints."""
 
 from collections import defaultdict
 from itertools import pairwise
@@ -12,7 +12,7 @@ from kubernetes_resource_optimizer.optimization.variables import ModelVariables
 def add_assignment_constraints(
     model: pulp.LpProblem, data: InputData, variables: ModelVariables
 ) -> None:
-    """Enforce sum_j x[i,j] = 1 for every workload i."""
+    """Enforce sum_j x[i,j] = 1 for every pod i."""
 
     for pod in data.pods:
         model += (
@@ -28,7 +28,7 @@ def add_assignment_constraints(
 def add_node_activation_constraints(
     model: pulp.LpProblem, data: InputData, variables: ModelVariables
 ) -> None:
-    """Enforce x[i,j] <= y[j] for every workload i and node j."""
+    """Enforce x[i,j] <= y[j] for every pod i and node j."""
 
     for pod in data.pods:
         for node in data.nodes:

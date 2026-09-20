@@ -12,7 +12,7 @@ def add_request_limit_ordering_constraints(
     variables: ModelVariables,
     requests: dict[tuple[str, Resource], float],
 ) -> None:
-    """Enforce r[i,h] <= l[i,h] for every workload and resource."""
+    """Enforce r[i,h] <= l[i,h] for every pod and resource."""
 
     for pod in data.pods:
         for resource in Resource:

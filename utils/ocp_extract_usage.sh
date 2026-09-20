@@ -357,7 +357,7 @@ PYTHONPATH="${SCRIPT_DIR}/../src${PYTHONPATH:+:$PYTHONPATH}" "$PYTHON" \
     "${SCRIPT_DIR}/ocp_usage_to_csv.py" \
     --input-dir "$JSON_DIR" \
     --output "${OUTPUT_DIR}/usage.csv" \
-    --workloads-output "${OUTPUT_DIR}/workload.csv" \
+    --pods-output "${OUTPUT_DIR}/pods.csv" \
     --current-resources "${JSON_DIR}/current-resources.json" \
     --pod-owners "${JSON_DIR}/pod-owners.json" \
     --replicaset-owners "${JSON_DIR}/replicaset-owners.json"
@@ -372,4 +372,4 @@ echo "CPU pod series:     $CPU_PODS"
 echo "Memory pod series:  $MEM_PODS"
 echo "Output directory:   $OUTPUT_DIR"
 echo "Usage CSV:          ${OUTPUT_DIR}/usage.csv"
-echo "Workload CSV:       ${OUTPUT_DIR}/workload.csv"
+echo "Pod CSV:       ${OUTPUT_DIR}/pods.csv"

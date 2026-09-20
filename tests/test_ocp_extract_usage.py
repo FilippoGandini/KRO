@@ -89,7 +89,7 @@ print(json.dumps({"status": "success", "data": {"resultType": "matrix", "result"
         "api-a-cpu.json", "api-a-mem.json", "pod-owners.json", "replicaset-owners.json",
         "current-resources.json",
     }
-    with (output / "workload.csv").open() as stream:
+    with (output / "pods.csv").open() as stream:
         row = next(csv.DictReader(stream))
     assert row["service_id"] == "Deployment/api"
     assert row["current_cpu_request"] == "0.25"

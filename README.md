@@ -14,14 +14,15 @@ uv sync
 
 ## Usage
 
-Provide `nodes.csv`, `workloads.csv`, and `usage.csv`. CPU is measured in cores,
-memory in MiB, and all pods must share aligned timestamps.
+Provide `nodes.csv`, `pods.csv`, and `usage.csv`. CPU is measured in cores,
+memory in MiB, and all pods must share aligned timestamps. Both `pods.csv` and
+`usage.csv` require the identifier column `pod_id`.
 See [example inputs](data/examples).
 
 ```console
 uv run kro \
   --nodes data/examples/nodes.csv \
-  --workloads data/examples/workloads.csv \
+  --pods data/examples/pods.csv \
   --usage data/examples/usage.csv \
   --time-limit-seconds 300 \
   --output-dir output/example

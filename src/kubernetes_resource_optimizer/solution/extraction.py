@@ -17,8 +17,8 @@ from kubernetes_resource_optimizer.solution.models import (
     NodeDiagnostics,
     NodeResult,
     OptimizationResult,
+    PodResult,
     ViolationDiagnostics,
-    WorkloadResult,
 )
 
 _BINARY_THRESHOLD = 0.5
@@ -74,15 +74,15 @@ def extract_solution(
         ]
         if len(assigned_nodes) != 1:
             raise ValueError(
-                f"workload {pod.pod_id!r} has {len(assigned_nodes)} assigned nodes"
+                f"pod {pod.pod_id!r} has {len(assigned_nodes)} assigned nodes"
             )
         assigned_node = assigned_nodes[0]
         assigned_node_by_pod[pod.pod_id] = assigned_node
         assigned_by_node[assigned_node].append(pod.pod_id)
 
-    workloads = tuple(
-        WorkloadResult(
-            workload_id=pod.pod_id,
+    pods = tuple(
+        PodResult(
+            pod_id=pod.pod_id,
             recommended_cpu_request=model.requests[pod.pod_id, Resource.CPU],
             recommended_memory_request=model.requests[pod.pod_id, Resource.MEMORY],
             recommended_cpu_limit=_value(variables.limit[pod.pod_id, Resource.CPU]),
@@ -98,7 +98,7 @@ def extract_solution(
             node_id=node.node_id,
             cost=node.cost,
             active=_value(variables.node_active[node.node_id]) > _BINARY_THRESHOLD,
-            assigned_workloads=tuple(sorted(assigned_by_node[node.node_id])),
+            assigned_pods=tuple(sorted(assigned_by_node[node.node_id])),
         )
         for node in data.nodes
     )
@@ -126,7 +126,7 @@ def extract_solution(
             scenario_count = len(samples)
             violations.append(
                 ViolationDiagnostics(
-                    workload_id=pod.pod_id,
+                    pod_id=pod.pod_id,
                     resource=resource,
                     request_violation_count=request_count,
                     request_violation_rate=request_count / scenario_count,
@@ -184,7 +184,7 @@ def extract_solution(
         solve_time_seconds=solver_result.solve_time_seconds,
         model_variable_count=model.problem.numVariables(),
         model_constraint_count=model.problem.numConstraints(),
-        workloads=workloads,
+        pods=pods,
         nodes=nodes,
         violations=tuple(violations),
         node_diagnostics=tuple(node_diagnostics),

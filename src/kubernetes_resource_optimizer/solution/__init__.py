@@ -5,15 +5,15 @@ from kubernetes_resource_optimizer.solution.models import (
     NodeDiagnostics,
     NodeResult,
     OptimizationResult,
+    PodResult,
     ViolationDiagnostics,
-    WorkloadResult,
 )
 
 __all__ = [
     "NodeDiagnostics",
     "NodeResult",
     "OptimizationResult",
+    "PodResult",
     "ViolationDiagnostics",
-    "WorkloadResult",
     "extract_solution",
 ]
