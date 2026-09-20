@@ -207,7 +207,7 @@ def generate_html_report(
     workload_table = _table(
         workload_rows,
         (
-            "Workload",
+            "Pod",
             "Node",
             "CPU request (cores)",
             "CPU limit (cores)",
@@ -339,7 +339,7 @@ def generate_html_report(
         for identifier, path in node_images
     )
     workload_sections = "".join(
-        f'<section><h3>{html.escape(identifier)}</h3><img src="{html.escape(path)}" alt="Workload {html.escape(identifier)} usage chart"></section>'
+        f'<section><h3>{html.escape(identifier)}</h3><img src="{html.escape(path)}" alt="Pod {html.escape(identifier)} usage chart"></section>'
         for identifier, path in workload_images
     )
     report_title = html.escape(f"KRO Report: {output_directory.resolve().name}")
@@ -374,22 +374,22 @@ img{{display:block;max-width:100%;height:auto;margin:auto}} .note{{padding:.8rem
 <h2>Summary</h2>{summary}
 <h2>Optimization settings</h2>{settings_table}
 <h2>Selected nodes</h2><div class="selected-nodes"><div>{selected_nodes_table}</div>{node_comparison}</div>
-<p class="note">Effective node demand is computed as <code>max(historical usage, recommended request)</code> for each placed workload. All charts are embedded: share this HTML file alone to view the complete report offline.</p>
+<p class="note">Effective node demand is computed as <code>max(historical usage, recommended request)</code> for each placed pod. All charts are embedded: share this HTML file alone to view the complete report offline.</p>
 <h2>Recommendations</h2>
 {NOTE if has_current else ""}
-<div class="table-controls"><label>Workload <input id="workload-search" type="search" placeholder="Search workload"></label>
+<div class="table-controls"><label>Pod <input id="workload-search" type="search" placeholder="Search pod"></label>
 <label>Node <select id="node-filter"><option value="">All nodes</option>{node_options}</select></label>
 <span id="row-count" role="status"></span></div>
 <div id="recommendations" class="table-scroll">{workload_table}</div>
 {impact_section(data, result, config, workload_cpu, workload_memory) if has_current else ""}
 <div class="chart-tabs" role="tablist" aria-label="Allocation charts">
 <button type="button" id="nodes-tab" role="tab" aria-selected="true" aria-controls="nodes-panel" tabindex="0">Nodes</button>
-<button type="button" id="workloads-tab" role="tab" aria-selected="false" aria-controls="workloads-panel" tabindex="-1">Workloads</button>
+<button type="button" id="workloads-tab" role="tab" aria-selected="false" aria-controls="workloads-panel" tabindex="-1">Pods</button>
 </div>
 <div class="chart-panel" id="nodes-panel" role="tabpanel" aria-labelledby="nodes-tab" tabindex="0">
 <h2>Active node allocation</h2>{node_sections}</div>
 <div class="chart-panel" id="workloads-panel" role="tabpanel" aria-labelledby="workloads-tab" tabindex="0" hidden>
-<h2>Workload usage and boundaries</h2>{workload_sections}</div>
+<h2>Pod usage and boundaries</h2>{workload_sections}</div>
 <noscript><style>.chart-tabs{{display:none}}.chart-panel[hidden]{{display:block}}</style></noscript>
 {_CHART_TABS_SCRIPT}
 {_TABLE_SCRIPT}
@@ -413,7 +413,7 @@ _TABLE_SCRIPT = r"""<script>
         (filter.value !== '' && row.cells[1].textContent !== filter.value);
       if (!row.hidden) count++;
     });
-    document.getElementById('row-count').textContent = `${count} / ${rows.length} workloads`;
+    document.getElementById('row-count').textContent = `${count} / ${rows.length} pods`;
   };
   search.addEventListener('input', update);
   filter.addEventListener('change', update);

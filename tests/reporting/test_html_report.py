@@ -63,8 +63,8 @@ def test_generates_only_dated_html_with_embedded_charts(
     assert all(ElementTree.fromstring(chart).tag == "{http://www.w3.org/2000/svg}svg"
                for chart in charts)
     assert b"Node node-a" in charts[0]
-    assert b"Workload pod-a" in charts[1]
-    assert b"Workload pod-b" in charts[2]
+    assert b"Pod pod-a" in charts[1]
+    assert b"Pod pod-b" in charts[2]
 
 
 def test_current_comparison_is_optional_and_handles_partial_values(
@@ -100,9 +100,9 @@ def test_current_comparison_is_optional_and_handles_partial_values(
     assert 'data-sort="2"' in document
     sources = re.findall(r'<img src="([^"]+)"', document)
     charts = [base64.b64decode(source.split(",", 1)[1]).decode() for source in sources]
-    svg = next(chart for chart in charts if "Workload pod-a" in chart)
+    svg = next(chart for chart in charts if "Pod pod-a" in chart)
     assert "Current request (0% coverage)" in svg
     assert "Current limit (50% coverage)" in svg
     assert "Recommended limit (100% coverage)" in svg
-    other_svg = next(chart for chart in charts if "Workload pod-b" in chart)
+    other_svg = next(chart for chart in charts if "Pod pod-b" in chart)
     assert "Current request" not in other_svg

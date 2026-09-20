@@ -56,7 +56,7 @@ def comparison_table(
     cpu: tuple[WorkloadSeries, ...], memory: tuple[WorkloadSeries, ...],
     risks: tuple[float, float, float, float],
 ) -> str:
-    headings = ("Workload", "Node", "CPU request (cores)", "CPU limit (cores)",
+    headings = ("Pod", "Node", "CPU request (cores)", "CPU limit (cores)",
                 "Memory request", "Memory limit")
     header = "".join(f'<th scope="col">{heading}</th>' for heading in headings)
     rows = []

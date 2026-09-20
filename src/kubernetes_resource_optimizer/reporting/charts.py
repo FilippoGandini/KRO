@@ -183,6 +183,6 @@ def save_workload_chart(
         axis.grid(axis="y", alpha=0.25)
         _configure_scenario_axis(axis, series.timestamps)
         axis.legend(loc="upper left", bbox_to_anchor=(1.01, 1), fontsize="small")
-    figure.suptitle(f"Workload {cpu.workload_id} on {cpu.assigned_node}", fontsize=15)
+    figure.suptitle(f"Pod {cpu.workload_id} on {cpu.assigned_node}", fontsize=15)
     figure.savefig(destination, format="svg", bbox_inches="tight")
     plt.close(figure)
