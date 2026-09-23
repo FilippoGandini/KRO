@@ -122,6 +122,52 @@ def test_no_later_phase_after_feasible_but_unproven_result(monkeypatch) -> None:
     assert "incomplete" in result.message
 
 
+def test_highs_roundoff_in_node_cost_allows_later_phases(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    import kubernetes_resource_optimizer.optimization.solver as adapter
+
+    source = data()
+    source = replace(
+        source, nodes=tuple(replace(node, cost=node.cost * 5) for node in source.nodes)
+    )
+    model = build_model(source, replace(CONFIG, fairness=True))
+    original = adapter._solve
+    calls = 0
+    residual = 3.5527136788004996e-16
+
+    def with_roundoff(problem, command, solver):
+        nonlocal calls
+        result = original(problem, command, solver)
+        calls += 1
+        if calls == 1:
+            assert result.status is SolverStatus.OPTIMAL
+            assert result.objective_value == pytest.approx(5.0)
+            problem.solverModel = SimpleNamespace(
+                getInfo=lambda: SimpleNamespace(mip_gap=residual, mip_dual_bound=5.0)
+            )
+            return replace(result, objective_value=5.000000000000001)
+        return result
+
+    monkeypatch.setattr(adapter, "_solve", with_roundoff)
+    result = solve_lexicographic(model, HighsSolver())
+
+    assert calls == 3
+    assert result.lexicographic_complete
+    assert result.status is SolverStatus.OPTIMAL
+    assert [stage.name for stage in result.stages] == [
+        "node_cost", "fairness", "weighted_limits"
+    ]
+    assert result.stages[0].status is SolverStatus.OPTIMAL
+    assert result.stages[0].objective_value == 5.000000000000001
+    assert result.stages[0].mip_gap == residual
+    assert result.stages[0].best_bound == 5.0
+    assert sum(
+        node.cost * model.variables.node_active[node.node_id].varValue
+        for node in source.nodes
+    ) == pytest.approx(5.0)
+
+
 def test_later_no_incumbent_restores_prior_feasible_values(monkeypatch) -> None:
     model = build_model(data(), CONFIG)
     original = HighsSolver.solve

@@ -98,6 +98,12 @@ def test_cbc_gap_stop_is_distinct_from_time_stop() -> None:
         (SolverStatus.OPTIMAL, 0.0, 0.05, SolverStatus.OPTIMAL),
         (SolverStatus.FEASIBLE, 0.2, 0.05, SolverStatus.FEASIBLE),
         (SolverStatus.OPTIMAL, 0.04, 0.0, SolverStatus.FEASIBLE),
+        (SolverStatus.OPTIMAL, 3.5527136788004996e-16, 0.0, SolverStatus.OPTIMAL),
+        (SolverStatus.OPTIMAL, 1e-12, 0.0, SolverStatus.OPTIMAL),
+        (SolverStatus.OPTIMAL, 1.001e-12, 0.0, SolverStatus.FEASIBLE),
+        (SolverStatus.OPTIMAL, 1.001e-12, 0.05, SolverStatus.GAP_SATISFIED),
+        (SolverStatus.FEASIBLE, 3.5527136788004996e-16, 0.0, SolverStatus.FEASIBLE),
+        (SolverStatus.FEASIBLE, 0.0, 0.05, SolverStatus.FEASIBLE),
     ],
 )
 def test_highs_native_gap_is_not_misreported_as_exact_optimality(

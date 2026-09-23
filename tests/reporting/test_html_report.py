@@ -48,9 +48,14 @@ def test_generates_only_dated_html_with_embedded_charts(
     assert "Scenario interval (inferred)" in document
     assert "1h" in document
     assert "Selected nodes" in document
-    assert "CPU capacity (cores)" in document
-    assert "Memory capacity</th>" in document
-    assert "<td>3.90625 GiB</td>" in document
+    assert "<dt>CPU capacity</dt><dd>4 cores</dd>" in document
+    assert "<dt>Memory capacity</dt>" in document
+    assert "<dd>3.90625 GiB</dd>" in document
+    selected_nodes = document.split("<h2>Selected nodes</h2>")[1].split('<p class="note">')[0]
+    assert "<table" not in selected_nodes
+    assert 'class="node-cost"' in selected_nodes
+    assert "Peak effective demand" in selected_nodes
+    assert "Remaining at peak" in selected_nodes
     assert "<td>250 MiB</td><td>350 MiB</td>" in document
     assert "CPU request (cores)" in document
     assert "CPU limit (cores)" in document

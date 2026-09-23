@@ -13,6 +13,9 @@ from typing import Protocol
 
 import pulp
 
+# Classification only: do not change solver targets or objective lock tolerances.
+_HIGHS_NUMERICAL_GAP_TOLERANCE = 1e-12
+
 
 class SolverName(StrEnum):
     """Supported local MILP solvers."""
@@ -128,7 +131,13 @@ class HighsSolver:
         bound = bound if bound is not None and math.isfinite(bound) else None
         status = result.status
         # HiGHS reports kOptimal also when its relative gap target is reached.
-        if status is SolverStatus.OPTIMAL and gap is not None and gap > 0:
+        # Preserve optimality for floating-point residuals, keeping the raw gap
+        # for diagnostics. A time stop must never be promoted by this tolerance.
+        if (
+            status is SolverStatus.OPTIMAL
+            and gap is not None
+            and gap > _HIGHS_NUMERICAL_GAP_TOLERANCE
+        ):
             status = (
                 SolverStatus.GAP_SATISFIED
                 if self.mip_gap is not None and gap <= self.mip_gap

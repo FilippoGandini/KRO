@@ -12,6 +12,7 @@ from pathlib import Path
 
 from kubernetes_resource_optimizer.data.models import InputData, Resource
 from kubernetes_resource_optimizer.optimization.config import OptimizationConfig
+from kubernetes_resource_optimizer.optimization.solver import SolverStatus
 from kubernetes_resource_optimizer.reporting.charts import (
     save_node_chart,
     save_pod_chart,
@@ -154,6 +155,27 @@ def generate_html_report(
 
     timestamps = sorted({sample.timestamp for sample in data.usage_samples})
     period = _historical_period(timestamps)
+    solution_status = (
+        "Feasible"
+        if result.solver_status is SolverStatus.GAP_SATISFIED
+        else result.solver_status.value.replace("_", " ").capitalize()
+    )
+    phase_labels = {"node_cost": "Node cost", "fairness": "Fairness",
+                    "weighted_limits": "Weighted limits"}
+    phase_outcomes = " · ".join(
+        html.escape(
+            f"{phase_labels.get(stage.name, stage.name)}: "
+            + ("Gap satisfied" if stage.status is SolverStatus.GAP_SATISFIED
+               else stage.status.value.replace("_", " ").capitalize())
+        )
+        for stage in result.stages
+    )
+    compact_summary = (
+        f'<p class="solution-status">Solution: <strong>{solution_status}</strong></p>'
+        f'<p class="phase-outcomes">{phase_outcomes}</p>'
+        if phase_outcomes else
+        f'<p class="solution-status">Solution: <strong>{solution_status}</strong></p>'
+    )
     summary = _table(
         [
             ("Solver", result.solver.display_name),
@@ -293,43 +315,51 @@ def generate_html_report(
                 "Maximum aggregate configured memory limits allowed relative to a node's memory capacity.",
             ),
         ],
-        ("Setting", "Value", "Meaning"),
+        ("Parameter", "Value", "Meaning"),
     )
     active_node_ids = {node.node_id for node in result.nodes if node.active}
-    selected_nodes_table = _table(
-        [
-            (
-                node.node_id,
-                f"{node.cpu_capacity:g}",
-                _format_memory(node.memory_capacity),
-                f"{node.cost:g}",
-            )
-            for node in data.nodes
-            if node.node_id in active_node_ids
-        ],
-        ("Node", "CPU capacity (cores)", "Memory capacity", "Cost"),
-    )
-    node_bars: list[str] = []
+    nodes_by_id = {node.node_id: node for node in data.nodes}
+    node_cards: list[str] = []
     for cpu, memory in zip(node_cpu, node_memory, strict=True):
-        bars = []
+        resources = []
         for series in (cpu, memory):
             peak = max(series.total_effective_demand, default=0.0)
             ratio = peak / series.capacity
             remaining = series.capacity - peak
+            is_cpu = series.resource is Resource.CPU
+            label = "CPU" if is_cpu else "Memory"
+            capacity = (
+                f"{series.capacity:g} cores" if is_cpu
+                else _format_memory(series.capacity)
+            )
+            demand = (
+                f"{format_number(peak)} cores" if is_cpu else _format_memory(peak)
+            )
             margin = (
-                f"{format_number(remaining)} cores"
-                if series.resource is Resource.CPU
+                f"{format_number(remaining)} cores" if is_cpu
                 else _format_memory(remaining)
             )
             alert = " alert" if ratio > 1 + 1e-7 else ""
-            bars.append(
-                f'<div class="node-bar{alert}"><span>{series.resource.value.upper()}: '
-                f'{format_percent(ratio, 1)} · Remaining: {margin}</span>'
-                f'<div class="bar-track"><div class="bar-fill" '
+            resources.append(
+                f'<div class="node-resource{alert}">'
+                f'<div class="resource-heading"><strong>{label}</strong></div>'
+                f'<dl class="resource-metrics"><div><dt>{label} capacity</dt>'
+                f'<dd>{capacity}</dd></div><div><dt>Peak effective demand</dt>'
+                f'<dd>{demand}</dd></div><div><dt>Remaining at peak</dt>'
+                f'<dd>{margin}</dd></div></dl>'
+                '<div class="resource-bar-label"><span>Peak effective demand / capacity</span>'
+                f'<span class="resource-ratio">{format_percent(ratio, 1)}</span></div>'
+                f'<div class="bar-track" aria-hidden="true"><div class="bar-fill" '
                 f'style="width:{min(100, max(0, ratio * 100)):.4f}%"></div></div></div>'
             )
-        node_bars.append(f'<div class="node-comparison-row"><strong>{html.escape(cpu.node_id)}</strong><div class="node-resources">{"".join(bars)}</div></div>')
-    node_comparison = '<div class="node-comparison"><p>Peak effective demand / capacity</p>' + "".join(node_bars) + '</div>'
+        node = nodes_by_id[cpu.node_id]
+        node_cards.append(
+            '<article class="selected-node">'
+            f'<div class="node-identity"><h3>{html.escape(cpu.node_id)}</h3>'
+            f'<span class="node-cost">Cost <strong>{node.cost:g}</strong></span></div>'
+            f'<div class="node-resources">{"".join(resources)}</div></article>'
+        )
+    selected_nodes = '<div class="selected-nodes">' + "".join(node_cards) + '</div>'
     node_options = "".join(
         f'<option value="{html.escape(identifier, quote=True)}">{html.escape(identifier)}</option>'
         for identifier in sorted(active_node_ids)
@@ -351,11 +381,26 @@ body{{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;max-width:1500px
 h1,h2,h3{{color:#102A43}} section{{background:white;padding:1rem 1.25rem;margin:1rem 0;border:1px solid #dfe3e6;border-radius:8px}}
 table{{border-collapse:collapse;width:100%;background:white;margin:1rem 0}} th,td{{border:1px solid #dfe3e6;padding:.55rem;text-align:center}} th{{background:#eef3f7}}
 img{{display:block;max-width:100%;height:auto;margin:auto}} .note{{padding:.8rem 1rem;background:#eceff1;border-left:4px solid #78909c}}
-.selected-nodes{{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1.5rem;align-items:center}}
-.selected-nodes table{{margin:0}}
-.node-comparison{{background:white;padding:1rem;border:1px solid #dfe3e6;border-radius:8px}}
-.node-comparison>p{{margin:0 0 .8rem}} .node-comparison-row+ .node-comparison-row{{border-top:1px solid #e5e7eb;margin-top:.75rem;padding-top:.75rem}}
-.node-resources{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}} .node-bar{{margin:.4rem 0 0;min-width:0}} .node-bar span{{display:block;font-size:.85rem;line-height:1.5;margin-bottom:.25rem}} .bar-track{{height:12px;background:#e5e7eb;border-radius:3px;overflow:hidden}} .bar-fill{{height:100%;background:#4C78A8}} .alert .bar-fill{{background:#C62828}}
+.report-details{{background:white;padding:1rem 1.25rem;margin:1rem 0;border:1px solid #dfe3e6;border-radius:8px}}
+.report-details>summary{{cursor:pointer;color:#102A43;font-size:1.25rem;font-weight:600}}
+.report-details>summary:focus-visible{{outline:3px solid #1565C0;outline-offset:4px}}
+.report-details>summary h2{{display:inline;font:inherit}}
+.solution-status{{margin-bottom:.5rem}} .phase-outcomes{{margin-top:0;line-height:1.7}}
+.selected-nodes{{background:white;border:1px solid #dfe3e6;border-radius:12px;overflow:hidden}}
+.selected-node{{display:grid;grid-template-columns:minmax(140px,1fr) minmax(0,4fr);gap:2rem;padding:1.5rem;break-inside:avoid}}
+.selected-node+.selected-node{{border-top:1px solid #e5e7eb}}
+.node-identity h3{{margin:0 0 .65rem;overflow-wrap:anywhere}}
+.node-cost{{display:inline-block;padding:.3rem .65rem;border-radius:6px;background:#eef3f7;color:#52616b;font-size:.9rem}}
+.node-cost strong{{color:#102A43;margin-left:.4rem}}
+.node-resources{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2rem}}
+.node-resource{{min-width:0}} .resource-heading{{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.65rem}}
+.resource-ratio{{font-size:1.25rem;font-weight:600;color:#245b89;font-variant-numeric:tabular-nums}}
+.resource-bar-label{{display:flex;justify-content:space-between;align-items:baseline;gap:.75rem;margin:1rem 0 .4rem;font-size:.8rem;color:#52616b}}
+.bar-track{{height:8px;background:#e8edf2;border-radius:4px;overflow:hidden}} .bar-fill{{height:100%;background:#4C78A8;border-radius:4px}}
+.resource-metrics{{display:flex;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin:.85rem 0 0}}
+.resource-metrics dt{{font-size:.75rem;color:#52616b;margin-bottom:.25rem}}
+.resource-metrics dd{{margin:0;font-size:.9rem;font-weight:600;font-variant-numeric:tabular-nums}}
+.alert .bar-fill{{background:#C62828}} .alert .resource-ratio{{color:#C62828}}
 .table-controls{{display:flex;gap:1rem;align-items:center;flex-wrap:wrap}} input,select{{font:inherit;padding:.4rem}}
 .table-scroll{{max-height:650px;overflow:auto}} #recommendations table{{margin:0}} #recommendations thead{{position:sticky;top:0;z-index:1;background:#eef3f7}}
 #recommendations td{{text-align:right;font-variant-numeric:tabular-nums}} #recommendations td:nth-child(-n+2){{text-align:left}}
@@ -366,16 +411,19 @@ img{{display:block;max-width:100%;height:auto;margin:auto}} .note{{padding:.8rem
 .chart-tabs button:focus-visible{{outline:3px solid #102A43;outline-offset:2px}}
 .chart-panel[hidden]{{display:none}}
 @media print{{.chart-tabs{{display:none}}.chart-panel[hidden]{{display:block}}}}
-@media(max-width:900px){{.selected-nodes{{grid-template-columns:1fr}}}}
+@media(max-width:900px){{.selected-node{{grid-template-columns:1fr;gap:1.25rem}}}}
 @media(max-width:500px){{.node-resources{{grid-template-columns:1fr;gap:.5rem}}}}
 {STYLES + IMPACT_STYLES if has_current else ""}
 </style></head><body>
 <h1>{report_title}</h1>
-<h2>Optimization summary</h2>{summary}
-<h2>Optimization settings</h2>{settings_table}
-<h2>Selected nodes</h2><div class="selected-nodes"><div>{selected_nodes_table}</div>{node_comparison}</div>
+<h2>Optimization summary</h2>{compact_summary}
+<details class="report-details" id="optimization-details">
+<summary>Optimization details</summary>{summary}</details>
+<details class="report-details" id="optimization-settings">
+<summary><h2>Optimization settings</h2></summary>{settings_table}</details>
+<h2>Selected nodes</h2>{selected_nodes}
 <p class="note">Effective node demand is computed as <code>max(historical usage, recommended request)</code> for each placed pod. All charts are embedded: share this HTML file alone to view the complete report offline.</p>
-<h2>Recommendations</h2>
+<h2>Pod recommendations</h2>
 {NOTE if has_current else ""}
 <div class="table-controls"><label>Pod <input id="pod-search" type="search" placeholder="Search pod"></label>
 <label>Node <select id="node-filter"><option value="">All nodes</option>{node_options}</select></label>
