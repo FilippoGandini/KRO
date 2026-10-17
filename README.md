@@ -1,15 +1,13 @@
 # Kubernetes Resource Optimizer
 
-Kubernetes Resource Optimizer (KRO) optimizes pod sizing and placement
-using temporally aligned CPU and memory usage histories. It evaluates pods together
-to account for simultaneous peaks and complementary usage profiles when sharing
-node capacity. Requests are calculated from configurable historical coverage
+Kubernetes Resource Optimizer (KRO) provides recommendations for pod sizing and placement
+using temporally aligned CPU and memory usage histories. It optimizes resource utilization and infrastructure cost while preserving demand satisfaction. By evaluating pods together, KRO accounts for simultaneous peaks and complementary usage profiles when sharing node capacity. Requests are calculated from configurable historical coverage
 requirements. Limits and placement are optimized jointly through mixed-integer
 linear programming (MILP), first minimizing active-node cost and then maximizing
 spike-weighted normalized limits. An optional fairness objective can be inserted
 between the two stages to promote a balanced allocation of headroom above
 requests. KRO runs entirely offline on local CSV files and
-produces recommendations without connecting to a cluster.
+provides recommendations without connecting to a cluster.
 
 **Stack:** Python · PuLP · HiGHS / CBC · pandas · Matplotlib
 
