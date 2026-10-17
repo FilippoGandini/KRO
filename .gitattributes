@@ -1,0 +1,2 @@
+# Generated reports are artifacts, not source code.
+output/** linguist-generated=true

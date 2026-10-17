@@ -11,6 +11,8 @@ between the two stages to promote a balanced allocation of headroom above
 requests. KRO runs entirely offline on local CSV files and
 produces recommendations without connecting to a cluster.
 
+**Stack:** Python · PuLP · HiGHS / CBC · pandas · Matplotlib
+
 <p align="center">
   <img src="assets/example-node-allocation.svg" alt="CPU allocation from the example report on node-c, with recommended requests and limits" width="900">
 </p>
