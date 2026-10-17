@@ -32,21 +32,24 @@
 
 For $G\in\mathcal G$, $i\in G$, $h\in H$:
 
-$$
-r_{ih}=\begin{cases}\max_{v\in G}u_{v(N-k_h)h},&k_h<N,\\0,&k_h=N,\end{cases}
+```math
+r_{ih}=\begin{cases}
+\max_{v\in G}u_{v(N-k_h)h}, & k_h<N,\\
+0, & k_h=N.
+\end{cases}
 \qquad U_{ih}=\max_{v\in G}\min\{B_{vh},\alpha_h P_{vh}\}.
-$$
+```
 
 For $i\in I,h\in H$:
 
-$$
+```math
 a_{ih}=\begin{cases}
 \displaystyle\frac1{k_h}\sum_{q=N-k_h+1}^{N}
 \frac{\max\{0,u_{i(q)h}-r_{ih}\}}{\max\{r_{ih},P_{ih}\}},
 &k_h>0,\ \max\{r_{ih},P_{ih}\}>0,\\
 0,&\text{otherwise}.
 \end{cases}
-$$
+```
 
 ## Decision variables
 
@@ -61,9 +64,9 @@ $$
 
 ## Base MILP
 
-$$
+```math
 \begin{aligned}
-\operatorname{lex\,min}_{x,y,l,w,s}\quad&
+\mathop{\mathrm{lex\,min}}_{x,y,l,w,s}\quad&
 \left(\sum_{j\in J}c_jy_j,\;
 -\sum_{h\in H}\sum_{\substack{G\in\mathcal G\\U_{i_Gh}>0}}
 \left(\max_{i\in G}a_{ih}\right)\frac{l_{i_Gh}}{U_{i_Gh}}\right)\\
@@ -87,24 +90,24 @@ w_{ith}&\in\{0,1\} &&i\in I,\ t\in T,\ h\in H,\\
 0\le l_{ih}&\le U_{ih} &&i\in I,\ h\in H,\\
 s_{ijh}&\ge0 &&i\in I,\ j\in J,\ h\in H.
 \end{aligned}
-$$
+```
 
 ## Optional fairness extension
 
 Add the constraints:
 
-$$
+```math
 \begin{aligned}
 f_h&\le\frac{l_{i_Gh}-r_{i_Gh}}{U_{i_Gh}}
 &&h\in H,\ G\in\mathcal G:\ U_{i_Gh}>0,\\
 f_h&=0&&h\in H:\ U_{i_Gh}=0\text{ for every }G\in\mathcal G,\\
 0\le f_h&\le1&&h\in H.
 \end{aligned}
-$$
+```
 
 Maximize $\sum_h f_h$ between cost minimization and spike-weighted limits.
 
 ---
 
 
-Full definitions and interpretation: [technical document](mathematical-formulation.tex).
+Full definitions and interpretation: [technical document (PDF)](KRO.pdf).
