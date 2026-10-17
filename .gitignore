@@ -22,8 +22,14 @@ data/examples/generate_usage.py
 
 
 results/
-output/
+/output/*
+!/output/example/
+/output/example/*
+!/output/example/example.html
+
 docs/*
+!docs/KRO.pdf
+!docs/formulation.md
 
 # Local project instructions; not part of the public repository.
 AGENTS.md

@@ -422,7 +422,7 @@ img{{display:block;max-width:100%;height:auto;margin:auto}} .note{{padding:.8rem
 <details class="report-details" id="optimization-settings">
 <summary><h2>Optimization settings</h2></summary>{settings_table}</details>
 <h2>Selected nodes</h2>{selected_nodes}
-<p class="note">Effective node demand is computed as <code>max(historical usage, recommended request)</code> for each placed pod. All charts are embedded: share this HTML file alone to view the complete report offline.</p>
+<p class="note">Effective node demand is computed as <code>max(historical usage, recommended request)</code> for each placed pod.</p>
 <h2>Pod recommendations</h2>
 {NOTE if has_current else ""}
 <div class="table-controls"><label>Pod <input id="pod-search" type="search" placeholder="Search pod"></label>
