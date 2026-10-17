@@ -8,11 +8,11 @@
 | $`J, j`$ | Candidate nodes. |
 | $`T, t`$ | Scenarios; $`N = \lvert T \rvert`$. |
 | $`H, h`$ | Resources: CPU, memory. |
-| $`\mathcal{G}`$ | Collection of replica groups and independent singleton groups. |
-| $`G\in\mathcal{G}`$ | One group of pods; a singleton contains one independent pod. |
+| $`\Gamma`$ | Collection of replica groups and independent singleton groups. |
+| $`G\in\Gamma`$ | One group of pods; a singleton contains one independent pod. |
 | $`i_G`$ | First pod in sorted group ID order. |
-| $`\mathcal{E}`$ | Collection of equivalent-node groups (same capacities and cost). |
-| $`E\in\mathcal{E}`$ | One equivalent-node group, $`E = (j_1, \ldots, j_{\lvert E \rvert})`$ in input order; $`p`$ indexes positions. |
+| $`\Omega`$ | Collection of equivalent-node groups (same capacities and cost). |
+| $`E\in\Omega`$ | One equivalent-node group, $`E = (j_1, \ldots, j_{\lvert E \rvert})`$ in input order; $`p`$ indexes positions. |
 | $`q`$ | Observation rank, $`1, \ldots, N`$. |
 
 
@@ -32,7 +32,7 @@
 | $`U_{ih}`$ | Shared effective limit cap, below. |
 | $`a_{ih}`$ | Normalized spike coefficient, below. |
 
-For $`G\in\mathcal{G}`$, $`i\in G`$, $`h\in H`$:
+For $`G\in\Gamma`$, $`i\in G`$, $`h\in H`$:
 
 When $`k_h<N`$, the shared request is:
 
@@ -74,15 +74,15 @@ a_{ih}=\begin{cases}
 \begin{aligned}
 \mathop{\mathrm{lex\,min}}_{x,y,l,w,s}\quad&
 \left(\sum_{j\in J}c_jy_j,\;
--\sum_{h\in H}\sum_{\substack{G\in\mathcal{G}\\U_{i_Gh}>0}}
+-\sum_{h\in H}\sum_{\substack{G\in\Gamma\\U_{i_Gh}>0}}
 \left(\max_{i\in G}a_{ih}\right)\frac{l_{i_Gh}}{U_{i_Gh}}\right)\\
 \text{subject to}\quad
 \sum_{j\in J}x_{ij}&=1 &&i\in I,\\
 x_{ij}&\le y_j &&i\in I,\ j\in J,\\
-y_{j_p}&\ge y_{j_{p+1}} &&E\in\mathcal{E},\ p=1,\ldots,|E|-1,\\
+y_{j_p}&\ge y_{j_{p+1}} &&E\in\Omega,\ p=1,\ldots,|E|-1,\\
 r_{ih}&\le R^{\mathrm{max}}_{ih} &&i\in I,\ h\in H,\\
 r_{ih}&\le l_{ih} &&i\in I,\ h\in H,\\
-l_{ih}&=l_{i_Gh} &&G\in\mathcal{G},\ i\in G\setminus\{i_G\},\ h\in H,\\
+l_{ih}&=l_{i_Gh} &&G\in\Gamma,\ i\in G\setminus\{i_G\},\ h\in H,\\
 u_{ith}&\le l_{ih}+P_{ih}w_{ith} &&i\in I,\ t\in T,\ h\in H,\\
 \sum_{t\in T}w_{ith}&\le b_h &&i\in I,\ h\in H,\\
 \sum_{i\in I}\max\{u_{ith},r_{ih}\}x_{ij}&\le C_{jh}y_j &&j\in J,\ t\in T,\ h\in H,\\
@@ -105,8 +105,8 @@ Add the constraints:
 ```math
 \begin{aligned}
 f_h&\le\frac{l_{i_Gh}-r_{i_Gh}}{U_{i_Gh}}
-&&h\in H,\ G\in\mathcal{G}:\ U_{i_Gh}>0,\\
-f_h&=0&&h\in H:\ U_{i_Gh}=0\text{ for every }G\in\mathcal{G},\\
+&&h\in H,\ G\in\Gamma:\ U_{i_Gh}>0,\\
+f_h&=0&&h\in H:\ U_{i_Gh}=0\text{ for every }G\in\Gamma,\\
 0\le f_h&\le1&&h\in H.
 \end{aligned}
 ```
